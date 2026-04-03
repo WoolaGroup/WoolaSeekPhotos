@@ -150,6 +150,13 @@
                         </StackPanel>
                     </Button>
 
+                    <Button x:Name="TestVisionBtn" Click="TestVisionBtn_Click" 
+        Style="{StaticResource SecondaryButton}" Margin="0,5">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="👁️" FontSize="16" Margin="0,0,10,0"/>
+                            <TextBlock Text="Probar VisionAgent"/>
+                        </StackPanel>
+                    </Button>
                     <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
 
                     <!-- Estadísticas -->

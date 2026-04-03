@@ -7,6 +7,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Woola.PhotoManager.Common.Services;
+using Woola.PhotoManager.Core.Agents;
+using Woola.PhotoManager.Core.Agents.Agents;
 using Woola.PhotoManager.Core.Services;
 using Woola.PhotoManager.Domain.Entities;
 using Woola.PhotoManager.Infrastructure.Database;
@@ -14,6 +16,7 @@ using Woola.PhotoManager.Infrastructure.Repositories;
 using Button = System.Windows.Controls.Button;
 using Color = System.Windows.Media.Color;
 using MessageBox = System.Windows.MessageBox;
+
 
 namespace Woola.PhotoManager.UI;
 
@@ -173,11 +176,25 @@ public partial class MainWindow : Window
         var connectionFactory = new SqliteConnectionFactory(dbPath);
         _photoRepository = new PhotoRepository(connectionFactory);
         _tagRepository = new TagRepository(connectionFactory);
+
+        // Servicios
         var thumbnailService = new ThumbnailService();
         var metadataService = new MetadataService();
-        var autoTaggingService = new AutoTaggingService(_tagRepository, connectionFactory);  // ← Actualizado
+        var objectDetectionService = new ObjectDetectionService();
 
-        _photoIndexer = new PhotoIndexer(_photoRepository, _tagRepository, thumbnailService, metadataService, autoTaggingService);
+        // Crear agentes
+        var metadataAgent = new MetadataAgent(metadataService);
+        var autoTaggingAgent = new AutoTaggingAgent(_tagRepository);
+        var visionAgent = new VisionAgent(objectDetectionService);
+
+        // Crear orquestador y registrar agentes
+        var orchestrator = new AgentOrchestrator(_tagRepository);
+        orchestrator.RegisterAgent(metadataAgent);
+        orchestrator.RegisterAgent(autoTaggingAgent);
+        orchestrator.RegisterAgent(visionAgent);
+
+        // Crear indexador con el orquestador
+        _photoIndexer = new PhotoIndexer(_photoRepository, _tagRepository, thumbnailService, metadataService, orchestrator);
         _photoIndexer.ProgressChanged += OnIndexingProgress;
     }
 
@@ -393,6 +410,15 @@ public partial class MainWindow : Window
             ReprocessTagsBtn.IsEnabled = true;
             ProgressBar.IsIndeterminate = false;
         }
+
+
+    }
+
+    private void TestVisionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var testWindow = new TestVisionWindow();
+        testWindow.Owner = this;
+        testWindow.ShowDialog();
     }
 }
 

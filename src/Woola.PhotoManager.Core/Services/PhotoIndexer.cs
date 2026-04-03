@@ -1,4 +1,5 @@
 ﻿using Woola.PhotoManager.Common.Services;
+using Woola.PhotoManager.Core.Agents;
 using Woola.PhotoManager.Domain.Entities;
 using Woola.PhotoManager.Infrastructure.Repositories;
 
@@ -12,21 +13,21 @@ public class PhotoIndexer : IPhotoIndexer
     private readonly IMetadataService _metadataService;
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isRunning;
-
+    private readonly IAgentOrchestrator _agentOrchestrator;
     private readonly IAutoTaggingService _autoTaggingService;
 
     public PhotoIndexer(
-        PhotoRepository photoRepository,
-        TagRepository tagRepository,
-        IThumbnailService thumbnailService,
-        IMetadataService metadataService,
-        IAutoTaggingService autoTaggingService)  // ← Nuevo parámetro
+     PhotoRepository photoRepository,
+     TagRepository tagRepository,
+     IThumbnailService thumbnailService,
+     IMetadataService metadataService,
+     IAgentOrchestrator agentOrchestrator)  // ← Nuevo parámetro
     {
         _photoRepository = photoRepository;
         _tagRepository = tagRepository;
         _thumbnailService = thumbnailService;
         _metadataService = metadataService;
-        _autoTaggingService = autoTaggingService;  // ← Inicializar
+        _agentOrchestrator = agentOrchestrator;  // ← Inicializar
     }
 
     private static readonly HashSet<string> SupportedExtensions = new(
@@ -127,9 +128,8 @@ public class PhotoIndexer : IPhotoIndexer
             var photoId = await _photoRepository.InsertPhotoAsync(photo);
             photo.Id = photoId;
 
-            // ✅ Generar y aplicar tags automáticos
-            var tags = await _autoTaggingService.GenerateTagsForPhotoAsync(photo);
-            await _autoTaggingService.ApplyTagsToPhotoAsync(photoId, tags);
+            // ✅ Ejecutar todos los agentes registrados (MetadataAgent, AutoTaggingAgent, VisionAgent)
+            await _agentOrchestrator.ProcessPhotoAsync(photo, cancellationToken);
         }
 
         foreach (var photo in batch)
@@ -143,6 +143,7 @@ public class PhotoIndexer : IPhotoIndexer
             catch { }
         }
     }
+
 
     private async Task<Photo> CreatePhotoFromFileAsync(string filePath, string hash)
     {
