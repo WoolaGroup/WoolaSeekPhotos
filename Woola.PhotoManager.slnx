@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="src/Woola.PhotoManager.Common/Woola.PhotoManager.Common.csproj" />
+  <Project Path="src/Woola.PhotoManager.Core/Woola.PhotoManager.Core.csproj" />
+  <Project Path="src/Woola.PhotoManager.Domain/Woola.PhotoManager.Domain.csproj" />
+  <Project Path="src/Woola.PhotoManager.Infrastructure/Woola.PhotoManager.Infrastructure.csproj" />
+  <Project Path="src/Woola.PhotoManager.UI/Woola.PhotoManager.UI.csproj" />
+</Solution>
