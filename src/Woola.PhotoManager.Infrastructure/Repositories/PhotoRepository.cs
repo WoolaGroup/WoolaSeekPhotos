@@ -20,86 +20,61 @@ public class PhotoRepository
         using var connection = _connectionFactory.CreateConnection();
 
         const string sql = @"
-        INSERT INTO Photos (Path, Hash, FileSize, DateTaken, Width, Height, Status, ThumbnailPath, CreatedAt, LastIndexedAt)
-        VALUES (@Path, @Hash, @FileSize, @DateTaken, @Width, @Height, @Status, @ThumbnailPath, @CreatedAt, @LastIndexedAt);
-        SELECT last_insert_rowid();
-    ";
+            INSERT INTO Photos (
+                Path, Hash, FileSize, DateTaken, Width, Height,
+                Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation,
+                Status, ThumbnailPath, CreatedAt, LastIndexedAt
+            ) VALUES (
+                @Path, @Hash, @FileSize, @DateTaken, @Width, @Height,
+                @Latitude, @Longitude, @CameraModel, @LensModel, @Aperture, @ShutterSpeed, @Iso, @FocalLength, @Orientation,
+                @Status, @ThumbnailPath, @CreatedAt, @LastIndexedAt
+            );
+            SELECT last_insert_rowid();
+        ";
 
         return await connection.ExecuteScalarAsync<int>(sql, new
         {
             photo.Path,
             photo.Hash,
             photo.FileSize,
-            DateTaken = photo.DateTaken?.ToIsoString() ?? null,  // ← Si es null, guarda null
+            DateTaken = photo.DateTaken?.ToIsoString(),
             photo.Width,
             photo.Height,
+            photo.Latitude,
+            photo.Longitude,
+            photo.CameraModel,
+            photo.LensModel,
+            photo.Aperture,
+            photo.ShutterSpeed,
+            photo.Iso,
+            photo.FocalLength,
+            photo.Orientation,
             photo.Status,
             photo.ThumbnailPath,
-            CreatedAt = photo.CreatedAt.ToIsoString(),  // ← Siempre tiene valor
-            LastIndexedAt = photo.LastIndexedAt?.ToIsoString() ?? null
+            CreatedAt = photo.CreatedAt.ToIsoString(),
+            LastIndexedAt = photo.LastIndexedAt?.ToIsoString()
         });
     }
-    public async Task<IEnumerable<Photo>> GetPhotosAsync(int limit = 100, int offset = 0)
+
+
+    public async Task<IEnumerable<Photo>> GetPhotosAsync(int limit = 1000, int offset = 0)
     {
         using var connection = _connectionFactory.CreateConnection();
 
         const string sql = @"
-        SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height, Status, ThumbnailPath, CreatedAt, LastIndexedAt
+        SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height,
+               Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation,
+               Status, ThumbnailPath, CreatedAt, LastIndexedAt
         FROM Photos
-        ORDER BY Id
+        ORDER BY COALESCE(DateTaken, CreatedAt) DESC
         LIMIT @Limit OFFSET @Offset
     ";
 
         var photos = await connection.QueryAsync<Photo>(sql, new { Limit = limit, Offset = offset });
 
-        foreach (var photo in photos)
-        {
-            // Convertir DateTaken
-            if (!string.IsNullOrEmpty(photo.DateTakenString))
-            {
-                try
-                {
-                    photo.DateTaken = DateTimeHelper.FromIsoString(photo.DateTakenString);
-                }
-                catch
-                {
-                    photo.DateTaken = null;
-                }
-            }
-
-            // Convertir CreatedAt (siempre debería tener valor)
-            if (!string.IsNullOrEmpty(photo.CreatedAtString))
-            {
-                try
-                {
-                    photo.CreatedAt = DateTimeHelper.FromIsoString(photo.CreatedAtString);
-                }
-                catch
-                {
-                    photo.CreatedAt = DateTime.UtcNow;
-                }
-            }
-            else
-            {
-                photo.CreatedAt = DateTime.UtcNow;
-            }
-
-            // Convertir LastIndexedAt
-            if (!string.IsNullOrEmpty(photo.LastIndexedAtString))
-            {
-                try
-                {
-                    photo.LastIndexedAt = DateTimeHelper.FromIsoString(photo.LastIndexedAtString);
-                }
-                catch
-                {
-                    photo.LastIndexedAt = null;
-                }
-            }
-        }
-
         return photos;
     }
+
     public async Task<int> GetTotalCountAsync()
     {
         using var connection = _connectionFactory.CreateConnection();
@@ -111,24 +86,17 @@ public class PhotoRepository
         using var connection = _connectionFactory.CreateConnection();
 
         const string sql = @"
-            SELECT p.Id, p.Path, p.Hash, p.FileSize, p.DateTaken, p.Width, p.Height, p.Status, p.ThumbnailPath
-            FROM Photos_FTS fts
-            JOIN Photos p ON p.Id = fts.rowid
-            WHERE Photos_FTS MATCH @SearchTerm
-            LIMIT @Limit
-        ";
+        SELECT p.Id, p.Path, p.Hash, p.FileSize, p.DateTaken, p.Width, p.Height,
+               p.Latitude, p.Longitude, p.CameraModel, p.LensModel, p.Aperture, p.ShutterSpeed, p.Iso, p.FocalLength, p.Orientation,
+               p.Status, p.ThumbnailPath
+        FROM Photos_FTS fts
+        JOIN Photos p ON p.Id = fts.rowid
+        WHERE Photos_FTS MATCH @SearchTerm
+        ORDER BY COALESCE(p.DateTaken, p.CreatedAt) DESC
+        LIMIT @Limit
+    ";
 
-        var photos = await connection.QueryAsync<Photo>(sql, new { SearchTerm = searchTerm, Limit = limit });
-
-        foreach (var photo in photos)
-        {
-            if (!string.IsNullOrEmpty(photo.DateTakenString))
-            {
-                photo.DateTaken = DateTimeHelper.FromIsoString(photo.DateTakenString);
-            }
-        }
-
-        return photos;
+        return await connection.QueryAsync<Photo>(sql, new { SearchTerm = searchTerm, Limit = limit });
     }
 
     public async Task UpdatePhotoStatusAsync(int id, string status)

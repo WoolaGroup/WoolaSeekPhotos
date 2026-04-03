@@ -9,6 +9,7 @@ public class PhotoIndexer : IPhotoIndexer
     private readonly PhotoRepository _photoRepository;
     private readonly TagRepository _tagRepository;
     private readonly IThumbnailService _thumbnailService;
+    private readonly IMetadataService _metadataService;
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isRunning;
 
@@ -22,11 +23,13 @@ public class PhotoIndexer : IPhotoIndexer
     public PhotoIndexer(
         PhotoRepository photoRepository,
         TagRepository tagRepository,
-        IThumbnailService thumbnailService)
+        IThumbnailService thumbnailService,
+        IMetadataService metadataService)
     {
         _photoRepository = photoRepository;
         _tagRepository = tagRepository;
         _thumbnailService = thumbnailService;
+        _metadataService = metadataService;
     }
 
     public async Task StartIndexingAsync(string rootPath, CancellationToken cancellationToken = default)
@@ -126,14 +129,26 @@ public class PhotoIndexer : IPhotoIndexer
         var fileInfo = new FileInfo(filePath);
         var dimensions = await GetImageDimensionsAsync(filePath);
 
+        // Extraer metadata EXIF
+        var metadata = await _metadataService.ExtractMetadataAsync(filePath);
+
         return new Photo
         {
             Path = filePath,
             Hash = hash,
             FileSize = fileInfo.Length,
-            DateTaken = fileInfo.LastWriteTime,
+            DateTaken = metadata.DateTaken ?? fileInfo.LastWriteTime,
             Width = dimensions.Width,
             Height = dimensions.Height,
+            Latitude = metadata.Latitude,
+            Longitude = metadata.Longitude,
+            CameraModel = metadata.CameraModel,
+            LensModel = metadata.LensModel,
+            Aperture = metadata.Aperture,
+            ShutterSpeed = metadata.ShutterSpeed,
+            Iso = metadata.Iso,
+            FocalLength = metadata.FocalLength,
+            Orientation = metadata.Orientation,
             Status = "Indexed",
             CreatedAt = DateTime.UtcNow,
             LastIndexedAt = DateTime.UtcNow

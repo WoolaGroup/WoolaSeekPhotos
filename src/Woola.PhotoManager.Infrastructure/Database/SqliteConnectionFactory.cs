@@ -22,6 +22,7 @@ public class SqliteConnectionFactory
         InitializeDatabase();
     }
 
+
     private void InitializeDatabase()
     {
         using var connection = new SqliteConnection(_connectionString);
@@ -33,18 +34,36 @@ public class SqliteConnectionFactory
             Path TEXT NOT NULL UNIQUE,
             Hash TEXT NOT NULL UNIQUE,
             FileSize INTEGER NOT NULL,
-            DateTaken TEXT,  -- ← Cambiado a TEXT para guardar ISO string
+            DateTaken TEXT,
             Width INTEGER,
             Height INTEGER,
+            Latitude REAL,
+            Longitude REAL,
+            CameraModel TEXT,
+            LensModel TEXT,
+            Aperture REAL,
+            ShutterSpeed REAL,
+            Iso INTEGER,
+            FocalLength INTEGER,
+            Orientation INTEGER,
             Status TEXT NOT NULL,
             ThumbnailPath TEXT,
-            CreatedAt TEXT NOT NULL,  -- ← Cambiado a TEXT
+            CreatedAt TEXT NOT NULL,
             LastIndexedAt TEXT
         );
 
+        -- Índices nuevos para búsqueda por ubicación
+        CREATE INDEX IF NOT EXISTS idx_photos_lat_lon ON Photos(Latitude, Longitude);
+        CREATE INDEX IF NOT EXISTS idx_photos_camera ON Photos(CameraModel);
+        CREATE INDEX IF NOT EXISTS idx_photos_iso ON Photos(Iso);
+        CREATE INDEX IF NOT EXISTS idx_photos_aperture ON Photos(Aperture);
+
+        -- Resto de tablas igual...
         CREATE INDEX IF NOT EXISTS idx_photos_hash ON Photos(Hash);
         CREATE INDEX IF NOT EXISTS idx_photos_status ON Photos(Status);
+        CREATE INDEX IF NOT EXISTS idx_photos_datetaken ON Photos(DateTaken);
 
+        -- FTS5
         CREATE VIRTUAL TABLE IF NOT EXISTS Photos_FTS USING fts5(
             Path,
             Tags,
@@ -52,6 +71,7 @@ public class SqliteConnectionFactory
             content_rowid=Id
         );
 
+        -- Tags
         CREATE TABLE IF NOT EXISTS Tags (
             Id INTEGER PRIMARY KEY AUTOINCREMENT,
             Name TEXT NOT NULL UNIQUE,
@@ -61,6 +81,7 @@ public class SqliteConnectionFactory
             CreatedAt TEXT NOT NULL
         );
 
+        -- PhotoTags
         CREATE TABLE IF NOT EXISTS PhotoTags (
             PhotoId INTEGER NOT NULL,
             TagId INTEGER NOT NULL,
@@ -72,6 +93,7 @@ public class SqliteConnectionFactory
             FOREIGN KEY(TagId) REFERENCES Tags(Id) ON DELETE CASCADE
         );
 
+        -- Faces
         CREATE TABLE IF NOT EXISTS Faces (
             Id INTEGER PRIMARY KEY AUTOINCREMENT,
             PhotoId INTEGER NOT NULL,
