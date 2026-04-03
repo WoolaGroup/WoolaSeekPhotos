@@ -125,6 +125,15 @@
                         </StackPanel>
                     </Button>
 
+                    <Button x:Name="ReprocessTagsBtn" Click="ReprocessTagsBtn_Click" 
+        Style="{StaticResource SecondaryButton}" Margin="0,5">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🏷️" FontSize="16" Margin="0,0,10,0"/>
+                            <TextBlock Text="Reprocesar Tags"/>
+                        </StackPanel>
+                    </Button>
+
+                    
                     <Button x:Name="StopBtn" Click="StopBtn_Click" IsEnabled="False" 
                             Style="{StaticResource SecondaryButton}" Margin="0,5">
                         <StackPanel Orientation="Horizontal">
@@ -148,6 +157,34 @@
                                Foreground="{StaticResource TextMuted}" 
                                Margin="0,0,0,10"/>
 
+                    <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
+
+                    <!-- Tags populares -->
+                    <TextBlock Text="TAGS POPULARES" FontSize="11" 
+           Foreground="{StaticResource TextMuted}" 
+           Margin="0,0,0,10"/>
+
+                    <ItemsControl x:Name="TagsList" Margin="0,0,0,10">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Content="{Binding Name}" 
+                    Style="{StaticResource SecondaryButton}"
+                    Margin="0,0,8,8"
+                    Padding="10,5"
+                    FontSize="11"
+                    Click="TagButton_Click"
+                    CommandParameter="{Binding Name}"/>
+                                <!-- ← Usar CommandParameter -->
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+
                     <Border Background="{StaticResource CardBg}" CornerRadius="8" Padding="12" Margin="0,5">
                         <StackPanel>
                             <TextBlock Text="📸 Total Fotos" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
@@ -164,7 +201,9 @@
                                Margin="0,0,0,10"/>
 
                     <Button x:Name="FilterAllBtn" Content="📷 Todas las fotos" 
-                            Style="{StaticResource SecondaryButton}" Margin="0,5"/>
+                        Style="{StaticResource SecondaryButton}" Margin="0,5"
+                        Click="FilterAllBtn_Click"/>
+
                     <Button x:Name="FilterRecentBtn" Content="🕐 Últimos 30 días" 
                             Style="{StaticResource SecondaryButton}" Margin="0,5"/>
 

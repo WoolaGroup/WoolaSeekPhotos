@@ -13,6 +13,22 @@ public class PhotoIndexer : IPhotoIndexer
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isRunning;
 
+    private readonly IAutoTaggingService _autoTaggingService;
+
+    public PhotoIndexer(
+        PhotoRepository photoRepository,
+        TagRepository tagRepository,
+        IThumbnailService thumbnailService,
+        IMetadataService metadataService,
+        IAutoTaggingService autoTaggingService)  // ← Nuevo parámetro
+    {
+        _photoRepository = photoRepository;
+        _tagRepository = tagRepository;
+        _thumbnailService = thumbnailService;
+        _metadataService = metadataService;
+        _autoTaggingService = autoTaggingService;  // ← Inicializar
+    }
+
     private static readonly HashSet<string> SupportedExtensions = new(
         new[] { ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif" },
         StringComparer.OrdinalIgnoreCase);
@@ -110,6 +126,10 @@ public class PhotoIndexer : IPhotoIndexer
         {
             var photoId = await _photoRepository.InsertPhotoAsync(photo);
             photo.Id = photoId;
+
+            // ✅ Generar y aplicar tags automáticos
+            var tags = await _autoTaggingService.GenerateTagsForPhotoAsync(photo);
+            await _autoTaggingService.ApplyTagsToPhotoAsync(photoId, tags);
         }
 
         foreach (var photo in batch)
@@ -180,4 +200,7 @@ public class PhotoIndexer : IPhotoIndexer
     {
         ProgressChanged?.Invoke(this, progress);
     }
+
+
+
 }
