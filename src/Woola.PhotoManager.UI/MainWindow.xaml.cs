@@ -181,17 +181,20 @@ public partial class MainWindow : Window
         var thumbnailService = new ThumbnailService();
         var metadataService = new MetadataService();
         var objectDetectionService = new ObjectDetectionService();
+        var ocrService = new OcrService();  // ← NUEVO
 
         // Crear agentes
         var metadataAgent = new MetadataAgent(metadataService);
         var autoTaggingAgent = new AutoTaggingAgent(_tagRepository);
         var visionAgent = new VisionAgent(objectDetectionService);
+        var ocrAgent = new OcrAgent(ocrService);  // ← NUEVO
 
         // Crear orquestador y registrar agentes
         var orchestrator = new AgentOrchestrator(_tagRepository);
         orchestrator.RegisterAgent(metadataAgent);
         orchestrator.RegisterAgent(autoTaggingAgent);
         orchestrator.RegisterAgent(visionAgent);
+        orchestrator.RegisterAgent(ocrAgent);  // ← NUEVO
 
         // Crear indexador con el orquestador
         _photoIndexer = new PhotoIndexer(_photoRepository, _tagRepository, thumbnailService, metadataService, orchestrator);
@@ -417,6 +420,14 @@ public partial class MainWindow : Window
     private void TestVisionBtn_Click(object sender, RoutedEventArgs e)
     {
         var testWindow = new TestVisionWindow();
+        testWindow.Owner = this;
+        testWindow.ShowDialog();
+    }
+
+
+    private void TestOcrBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var testWindow = new TestOcrWindow();
         testWindow.Owner = this;
         testWindow.ShowDialog();
     }
