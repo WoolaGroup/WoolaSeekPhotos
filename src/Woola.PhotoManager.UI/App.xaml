@@ -27,6 +27,25 @@
                             </Trigger>
                         </Style.Triggers>
                     </Style>
+
+                    <Style x:Key="WindowHeaderBorder" TargetType="Border">
+                        <Setter Property="Background" Value="#0F0F0F"/>
+                        <Setter Property="BorderBrush" Value="#333333"/>
+                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                        <Setter Property="Padding" Value="24,18"/>
+                    </Style>
+
+                    <Style x:Key="WindowHeaderTitle" TargetType="TextBlock">
+                        <Setter Property="FontSize" Value="16"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                        <Setter Property="Foreground" Value="White"/>
+                    </Style>
+
+                    <Style x:Key="WindowHeaderSubtitle" TargetType="TextBlock">
+                        <Setter Property="FontSize" Value="11"/>
+                        <Setter Property="Foreground" Value="#888888"/>
+                        <Setter Property="Margin" Value="0,4,0,0"/>
+                    </Style>
                 </ResourceDictionary>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>

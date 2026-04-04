@@ -11,18 +11,20 @@ namespace Woola.PhotoManager.UI.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private readonly IPhotoIndexer _photoIndexer;
-    private readonly ISemanticSearchService _semanticSearchService;
+    private readonly IHybridSearchService _hybridSearchService;
     private readonly PhotoRepository _photoRepository;
     private readonly TagRepository _tagRepository;
     private readonly IAutoTaggingService _autoTaggingService;
     private readonly IFolderPickerService _folderPickerService;
+    private readonly FaceRepository _faceRepository;
 
     private CancellationTokenSource? _indexingCts;
+    private readonly HashSet<string> _activeTagNames = new();
 
     public ObservableCollection<PhotoViewModel> Photos { get; } = new();
     public ObservableCollection<Tag> Tags { get; } = new();
+    public ObservableCollection<FilterChip> ActiveFilters { get; } = new();
 
-    // Evento para que MainWindow muestre MessageBox (UI concern)
     public event EventHandler<string>? ErrorOccurred;
 
     [ObservableProperty]
@@ -38,32 +40,41 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _photoCountText = "0";
     [ObservableProperty] private string _photoCountStatus = "0 fotos";
     [ObservableProperty] private string _folderPathText = "Ninguna carpeta seleccionada";
-    [ObservableProperty] private bool _isSemanticModeVisible;
-    [ObservableProperty] private string _semanticModeLabel = string.Empty;
+    [ObservableProperty] private bool _isHybridModeVisible;
+    [ObservableProperty] private string _hybridModeLabel = string.Empty;
+    [ObservableProperty] private PhotoDetailViewModel? _selectedPhoto;
+    [ObservableProperty] private bool _isLoadingPhotos = true;
+    [ObservableProperty] private bool _hasNoPhotos;
 
     public MainViewModel(
         IPhotoIndexer photoIndexer,
-        ISemanticSearchService semanticSearchService,
+        IHybridSearchService hybridSearchService,
         PhotoRepository photoRepository,
         TagRepository tagRepository,
         IAutoTaggingService autoTaggingService,
-        IFolderPickerService folderPickerService)
+        IFolderPickerService folderPickerService,
+        FaceRepository faceRepository)
     {
         _photoIndexer = photoIndexer;
-        _semanticSearchService = semanticSearchService;
+        _hybridSearchService = hybridSearchService;
         _photoRepository = photoRepository;
         _tagRepository = tagRepository;
         _autoTaggingService = autoTaggingService;
         _folderPickerService = folderPickerService;
+        _faceRepository = faceRepository;
 
         _photoIndexer.ProgressChanged += OnIndexingProgress;
+        Photos.CollectionChanged += (_, _) => UpdatePhotoState();
         _ = InitializeAsync();
     }
 
+    private void UpdatePhotoState() =>
+        HasNoPhotos = Photos.Count == 0 && !IsLoadingPhotos;
+
     partial void OnSearchTextChanged(string value)
     {
-        if (IsSemanticModeVisible) return;
-        _ = string.IsNullOrEmpty(value) ? LoadPhotosAsync() : SearchPhotosAsync(value);
+        if (IsHybridModeVisible) return;
+        _ = string.IsNullOrEmpty(value) ? LoadPhotosAsync() : FastSearchAsync(value);
     }
 
     private async Task InitializeAsync()
@@ -74,19 +85,28 @@ public partial class MainViewModel : ObservableObject
 
     private async Task LoadPhotosAsync()
     {
-        var photos = await _photoRepository.GetPhotosAsync(limit: 1000);
-        var sorted = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt);
-
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        IsLoadingPhotos = true;
+        try
         {
-            Photos.Clear();
-            foreach (var photo in sorted)
-                Photos.Add(new PhotoViewModel(photo));
+            var photos = await _photoRepository.GetPhotosAsync(limit: 1000);
+            var sorted = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt);
 
-            PhotoCountText = Photos.Count.ToString();
-            PhotoCountStatus = $"{Photos.Count} fotos";
-            StatusText = $"{Photos.Count} fotos cargadas";
-        });
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                Photos.Clear();
+                foreach (var photo in sorted)
+                    Photos.Add(new PhotoViewModel(photo));
+
+                PhotoCountText = Photos.Count.ToString();
+                PhotoCountStatus = $"{Photos.Count} fotos";
+                StatusText = $"{Photos.Count} fotos cargadas";
+            });
+        }
+        finally
+        {
+            IsLoadingPhotos = false;
+            UpdatePhotoState();
+        }
     }
 
     private async Task LoadTagsAsync()
@@ -100,13 +120,13 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
-    private async Task SearchPhotosAsync(string searchTerm)
+    private async Task FastSearchAsync(string query)
     {
-        var photos = await _photoRepository.SearchPhotosAsync(searchTerm, limit: 200);
+        var photos = await _photoRepository.SearchCandidatesAsync(query, limit: 200);
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
             Photos.Clear();
-            foreach (var photo in photos)
+            foreach (var photo in photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt))
                 Photos.Add(new PhotoViewModel(photo));
             PhotoCountStatus = $"{Photos.Count} resultados";
         });
@@ -121,6 +141,136 @@ public partial class MainViewModel : ObservableObject
             StatusText = e.Processed < e.TotalFound ? "Indexando..." : "Indexación completa";
         });
     }
+
+    [RelayCommand]
+    private async Task HybridSearchAsync()
+    {
+        var query = SearchText.Trim();
+        if (string.IsNullOrEmpty(query)) { StatusText = "Escribe algo para buscar..."; return; }
+
+        StatusText = $"🔍 Buscando: '{query}'...";
+        IsProgressIndeterminate = true;
+
+        try
+        {
+            var results = await _hybridSearchService.SearchAsync(query, limit: 200);
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                Photos.Clear();
+                foreach (var r in results)
+                    Photos.Add(new PhotoViewModel(r.Photo));
+
+                var exactCount = results.Count(r => r.ExactMatches > 0);
+                IsHybridModeVisible = true;
+                HybridModeLabel = $"Búsqueda híbrida: '{query}' – {results.Count} resultados ({exactCount} exactos)";
+                PhotoCountStatus = $"{results.Count} resultados híbridos";
+                StatusText = $"🔍 Híbrida: {results.Count} resultados";
+            });
+        }
+        catch (Exception ex)
+        {
+            ErrorOccurred?.Invoke(this, $"Error en búsqueda: {ex.Message}");
+            StatusText = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            IsProgressIndeterminate = false;
+        }
+    }
+
+    [RelayCommand]
+    private void ClearSearch()
+    {
+        IsHybridModeVisible = false;
+        SearchText = string.Empty;
+        StatusText = "Búsqueda cancelada";
+        ActiveFilters.Clear();
+        _activeTagNames.Clear();
+        _ = LoadPhotosAsync();
+    }
+
+    [RelayCommand]
+    private async Task FilterAllAsync()
+    {
+        IsHybridModeVisible = false;
+        _activeTagNames.Clear();
+        ActiveFilters.Clear();
+        await LoadPhotosAsync();
+        StatusText = $"Mostrando todas las fotos ({Photos.Count})";
+    }
+
+    [RelayCommand]
+    private async Task FilterRecentAsync()
+    {
+        IsHybridModeVisible = false;
+        var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+        var allPhotos = await _photoRepository.GetPhotosAsync(limit: 1000);
+        var recent = allPhotos.Where(p => p.DateTaken >= thirtyDaysAgo || p.CreatedAt >= thirtyDaysAgo);
+
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            Photos.Clear();
+            foreach (var photo in recent)
+                Photos.Add(new PhotoViewModel(photo));
+            PhotoCountStatus = $"{Photos.Count} fotos (últimos 30 días)";
+            StatusText = $"Filtrado: últimos 30 días – {Photos.Count} fotos";
+
+            ActiveFilters.Clear();
+            ActiveFilters.Add(new FilterChip("🕐 Últimos 30 días", () =>
+            {
+                ActiveFilters.Clear();
+                _ = FilterAllAsync();
+            }));
+        });
+    }
+
+    [RelayCommand]
+    private async Task FilterByTagAsync(string tagName)
+    {
+        if (string.IsNullOrEmpty(tagName)) return;
+        IsHybridModeVisible = false;
+
+        if (_activeTagNames.Contains(tagName))
+            _activeTagNames.Remove(tagName);
+        else
+            _activeTagNames.Add(tagName);
+
+        if (_activeTagNames.Count == 0) { await FilterAllAsync(); return; }
+
+        try
+        {
+            var photos = await _tagRepository.GetPhotosByTagsAsync(_activeTagNames);
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                Photos.Clear();
+                foreach (var photo in photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt))
+                    Photos.Add(new PhotoViewModel(photo));
+
+                PhotoCountStatus = $"{Photos.Count} fotos";
+                StatusText = $"Filtro AND: {string.Join(" + ", _activeTagNames)} – {Photos.Count} fotos";
+
+                ActiveFilters.Clear();
+                foreach (var tag in _activeTagNames.ToList())
+                {
+                    var capturedTag = tag;
+                    ActiveFilters.Add(new FilterChip($"🏷️ {capturedTag}",
+                        () => _ = FilterByTagAsync(capturedTag)));
+                }
+            });
+        }
+        catch (Exception ex) { StatusText = $"Error: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    private async Task SelectPhotoAsync(PhotoViewModel vm)
+    {
+        var detail = new PhotoDetailViewModel(vm, CloseDetailCommand);
+        SelectedPhoto = detail;
+        await detail.LoadDetailsAsync(_photoRepository, _tagRepository, _faceRepository);
+    }
+
+    [RelayCommand]
+    private void CloseDetail() => SelectedPhoto = null;
 
     [RelayCommand(CanExecute = nameof(CanStartIndexing))]
     private async Task StartIndexingAsync()
@@ -155,107 +305,6 @@ public partial class MainViewModel : ObservableObject
         StatusText = "Deteniendo...";
     }
     private bool IsIndexingCanExecute() => IsIndexing;
-
-    [RelayCommand]
-    private async Task SemanticSearchAsync()
-    {
-        var query = SearchText.Trim();
-        if (string.IsNullOrEmpty(query))
-        {
-            StatusText = "Escribe algo para buscar semánticamente...";
-            return;
-        }
-
-        StatusText = $"🧠 Buscando: '{query}'...";
-        IsProgressIndeterminate = true;
-
-        try
-        {
-            var results = await _semanticSearchService.SearchAsync(query, limit: 200);
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                Photos.Clear();
-                foreach (var photo in results)
-                    Photos.Add(new PhotoViewModel(photo));
-
-                IsSemanticModeVisible = true;
-                SemanticModeLabel = $"Búsqueda semántica: '{query}' – {Photos.Count} resultados";
-                PhotoCountStatus = $"{Photos.Count} resultados semánticos";
-                StatusText = $"🧠 Búsqueda semántica: {Photos.Count} resultados";
-            });
-        }
-        catch (Exception ex)
-        {
-            ErrorOccurred?.Invoke(this, $"Error en búsqueda semántica: {ex.Message}");
-            StatusText = $"Error: {ex.Message}";
-        }
-        finally
-        {
-            IsProgressIndeterminate = false;
-        }
-    }
-
-    [RelayCommand]
-    private void ClearSearch()
-    {
-        IsSemanticModeVisible = false;
-        SearchText = string.Empty;
-        StatusText = "Búsqueda semántica cancelada";
-        _ = LoadPhotosAsync();
-    }
-
-    [RelayCommand]
-    private async Task FilterAllAsync()
-    {
-        IsSemanticModeVisible = false;
-        await LoadPhotosAsync();
-        StatusText = $"Mostrando todas las fotos ({Photos.Count})";
-    }
-
-    [RelayCommand]
-    private async Task FilterRecentAsync()
-    {
-        IsSemanticModeVisible = false;
-        var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
-        var allPhotos = await _photoRepository.GetPhotosAsync(limit: 1000);
-        var recent = allPhotos.Where(p => p.DateTaken >= thirtyDaysAgo || p.CreatedAt >= thirtyDaysAgo);
-
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
-        {
-            Photos.Clear();
-            foreach (var photo in recent)
-                Photos.Add(new PhotoViewModel(photo));
-            PhotoCountStatus = $"{Photos.Count} fotos (últimos 30 días)";
-            StatusText = $"Filtrado: últimos 30 días – {Photos.Count} fotos";
-        });
-    }
-
-    [RelayCommand]
-    private async Task FilterByTagAsync(string tagName)
-    {
-        if (string.IsNullOrEmpty(tagName)) return;
-
-        IsSemanticModeVisible = false;
-
-        try
-        {
-            var photos = await _tagRepository.GetPhotosByTagAsync(tagName, limit: 500);
-            var sorted = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt);
-
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                Photos.Clear();
-                foreach (var photo in sorted)
-                    Photos.Add(new PhotoViewModel(photo));
-                PhotoCountStatus = $"{Photos.Count} fotos con tag: {tagName}";
-                StatusText = $"Mostrando {Photos.Count} fotos con tag: {tagName}";
-            });
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"Error: {ex.Message}";
-        }
-    }
 
     [RelayCommand]
     private async Task ReprocessTagsAsync()

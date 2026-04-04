@@ -50,7 +50,7 @@ public partial class App : System.Windows.Application
 
                 // Core Services
                 services.AddSingleton<IAutoTaggingService, AutoTaggingService>();
-                services.AddSingleton<ISemanticSearchService, SemanticSearchService>();
+                services.AddSingleton<IHybridSearchService, HybridSearchService>();
                 services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
                 services.AddSingleton<IPhotoIndexer, PhotoIndexer>();
 

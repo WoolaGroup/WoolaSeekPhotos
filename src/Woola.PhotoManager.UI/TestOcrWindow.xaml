@@ -14,9 +14,12 @@
         </Grid.RowDefinitions>
 
         <!-- Título -->
-        <TextBlock Text="Prueba de Extracción de Texto (OCR)" 
-                   FontSize="18" FontWeight="Bold" Foreground="White"
-                   Margin="0,0,0,20"/>
+        <Border Style="{StaticResource WindowHeaderBorder}" Margin="0,0,0,20">
+            <StackPanel>
+                <TextBlock Text="📝 Prueba de Extracción de Texto" Style="{StaticResource WindowHeaderTitle}"/>
+                <TextBlock Text="OCR y generación automática de tags desde texto detectado" Style="{StaticResource WindowHeaderSubtitle}"/>
+            </StackPanel>
+        </Border>
 
         <!-- Selección de imagen -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,20">

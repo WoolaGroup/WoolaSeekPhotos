@@ -114,6 +114,27 @@ public class PhotoRepository
         return await connection.QueryAsync<Photo>(sql, new { SearchTerm = searchTerm, Limit = limit });
     }
 
+    public async Task<List<Photo>> SearchCandidatesAsync(string query, int limit = 500)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var likeQuery = $"%{query}%";
+        const string sql = @"
+            SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height,
+                   Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed,
+                   Iso, FocalLength, Orientation, Status, ThumbnailPath, CreatedAt, LastIndexedAt
+            FROM Photos
+            WHERE Id IN (
+                SELECT pt.PhotoId FROM PhotoTags pt
+                JOIN Tags t ON t.Id = pt.TagId
+                WHERE t.Name LIKE @Query
+                UNION
+                SELECT Id FROM Photos WHERE Path LIKE @Query OR CameraModel LIKE @Query
+            )
+            ORDER BY COALESCE(DateTaken, CreatedAt) DESC
+            LIMIT @Limit";
+        return (await connection.QueryAsync<Photo>(sql, new { Query = likeQuery, Limit = limit })).ToList();
+    }
+
     public async Task UpdatePhotoStatusAsync(int id, string status)
     {
         using var connection = _connectionFactory.CreateConnection();

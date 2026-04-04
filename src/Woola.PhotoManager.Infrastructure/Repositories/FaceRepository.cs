@@ -67,6 +67,19 @@ public class FaceRepository
         await connection.ExecuteAsync(sql, new { Id = faceId, PersonName = personName, PersonId = personId });
     }
 
+    public async Task<IEnumerable<Face>> GetFacesForPhotoAsync(int photoId)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        const string sql = @"
+            SELECT Id, PhotoId, PersonName, PersonId, X, Y, Width, Height,
+                   Confidence, IsUserConfirmed, CreatedAt
+            FROM Faces
+            WHERE PhotoId = @PhotoId
+            ORDER BY Confidence DESC
+        ";
+        return await connection.QueryAsync<Face>(sql, new { PhotoId = photoId });
+    }
+
     public async Task DeleteAllFacesAsync()
     {
         using var connection = _connectionFactory.CreateConnection();
