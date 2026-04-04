@@ -95,19 +95,20 @@ public class SqliteConnectionFactory
 
         -- Faces
         CREATE TABLE IF NOT EXISTS Faces (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            PhotoId INTEGER NOT NULL,
-            PersonName TEXT,
-            X INTEGER NOT NULL,
-            Y INTEGER NOT NULL,
-            Width INTEGER NOT NULL,
-            Height INTEGER NOT NULL,
-            Encoding BLOB,
-            Confidence REAL NOT NULL,
-            IsUserConfirmed INTEGER NOT NULL,
-            CreatedAt TEXT NOT NULL,
-            FOREIGN KEY(PhotoId) REFERENCES Photos(Id) ON DELETE CASCADE
-        );
+        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+        PhotoId INTEGER NOT NULL,
+        PersonName TEXT,
+        PersonId TEXT,                    -- ← NUEVA COLUMNA
+        X INTEGER NOT NULL,
+        Y INTEGER NOT NULL,
+        Width INTEGER NOT NULL,
+        Height INTEGER NOT NULL,
+        Encoding BLOB,
+        Confidence REAL NOT NULL,
+        IsUserConfirmed INTEGER NOT NULL,
+        CreatedAt TEXT NOT NULL,
+        FOREIGN KEY(PhotoId) REFERENCES Photos(Id) ON DELETE CASCADE
+    );
 
         CREATE INDEX IF NOT EXISTS idx_faces_person ON Faces(PersonName);
     ";

@@ -165,6 +165,14 @@
                             <TextBlock Text="Probar OCR Agent"/>
                         </StackPanel>
                     </Button>
+
+                    <Button x:Name="FaceManagementBtn" Click="FaceManagementBtn_Click" 
+        Style="{StaticResource SecondaryButton}" Margin="0,5">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="👤" FontSize="16" Margin="0,0,10,0"/>
+                            <TextBlock Text="Gestionar Rostros"/>
+                        </StackPanel>
+                    </Button>
                     <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
 
                     <!-- Estadísticas -->

@@ -1,0 +1,401 @@
+﻿using Dapper;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Windows;
+using System.Windows.Media.Imaging;
+using Woola.PhotoManager.Common.Services;
+using Woola.PhotoManager.Core.Agents.Agents;
+using Woola.PhotoManager.Domain.Entities;
+using Woola.PhotoManager.Infrastructure.Database;
+using Woola.PhotoManager.Infrastructure.Repositories;
+using MessageBox = System.Windows.MessageBox;
+
+namespace Woola.PhotoManager.UI;
+
+public partial class FaceManagementWindow : Window
+{
+    private readonly FaceRepository _faceRepository;
+    private readonly PhotoRepository _photoRepository;
+    private readonly TagRepository _tagRepository;
+    private readonly SqliteConnectionFactory _connectionFactory;
+    private ObservableCollection<PersonGroup> _personGroups = new();
+
+    public FaceManagementWindow()
+    {
+        InitializeComponent();
+
+        var dbPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Woola",
+            "woola.db");
+
+        _connectionFactory = new SqliteConnectionFactory(dbPath);
+        _faceRepository = new FaceRepository(_connectionFactory);
+        _photoRepository = new PhotoRepository(_connectionFactory);
+        _tagRepository = new TagRepository(_connectionFactory);
+
+        PersonGroupsList.ItemsSource = _personGroups;
+
+        // Cargar grupos existentes
+        LoadGroups();
+
+        // Verificar si hay rostros, si no, sugerir reprocesar
+        CheckAndSuggestReprocess();
+    }
+
+    private async void CheckAndSuggestReprocess()
+    {
+        var allFaces = await _faceRepository.GetAllFacesAsync();
+
+        if (!allFaces.Any())
+        {
+            var statusText = FindName("StatusText") as System.Windows.Controls.TextBlock;
+            if (statusText != null)
+            {
+                statusText.Text = "⚠️ No hay rostros detectados. Haz clic en 'Reprocesar Rostros' para detectarlos.";
+            }
+        }
+    }
+
+
+    private async void LoadGroups()
+    {
+        var statusText = FindName("StatusText") as System.Windows.Controls.TextBlock;
+        if (statusText != null) statusText.Text = "Cargando rostros...";
+
+        try
+        {
+            var allFaces = await _faceRepository.GetAllFacesAsync();
+
+            // Limpiar grupos existentes
+            _personGroups.Clear();
+
+            // Cada rostro es su propio grupo (sin agrupar por similitud)
+            foreach (var face in allFaces)
+            {
+                // Si ya tiene nombre asignado, usar ese nombre
+                string displayName;
+                if (!string.IsNullOrEmpty(face.PersonName))
+                {
+                    displayName = face.PersonName;
+                }
+                else
+                {
+                    displayName = "👤 Persona sin identificar";
+                }
+
+                var personGroup = new PersonGroup
+                {
+                    Id = face.Id.ToString(),
+                    Faces = new List<Face> { face },
+                    DisplayName = displayName,
+                    FaceThumbnails = await GetFaceThumbnails(new List<Face> { face })
+                };
+                _personGroups.Add(personGroup);
+            }
+
+            if (statusText != null) statusText.Text = $"{allFaces.Count()} rostros encontrados";
+        }
+        catch (Exception ex)
+        {
+            var statusText2 = FindName("StatusText") as System.Windows.Controls.TextBlock;
+            if (statusText2 != null) statusText2.Text = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task<List<string>> GetFaceThumbnails(List<Face> faces)
+    {
+        var thumbnails = new List<string>();
+
+        foreach (var face in faces.Take(9))
+        {
+            var photo = await _photoRepository.GetPhotoByIdAsync(face.PhotoId);
+            if (photo != null && File.Exists(photo.Path))
+            {
+                thumbnails.Add(photo.Path);
+            }
+        }
+
+        return thumbnails;
+    }
+
+
+
+    private async void AssignName_Click(object sender, RoutedEventArgs e)
+    {
+        var button = sender as System.Windows.Controls.Button;
+        var group = button?.Tag as PersonGroup;
+
+        if (group == null || group.Faces.Count == 0) return;
+
+        var face = group.Faces.First(); // Cada grupo tiene un solo rostro
+
+        var dialog = new InputDialog("Asignar nombre a la persona", "Nombre:",
+                                      face.PersonName ?? "");
+
+        if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.Answer))
+        {
+            var newName = dialog.Answer.Trim();
+            var personId = Guid.NewGuid().ToString();
+
+            // Actualizar el rostro
+            await _faceRepository.UpdatePersonNameAsync(face.Id, newName, personId);
+
+            // Actualizar tag en la foto
+            var tagName = $"persona_{newName.ToLower().Replace(" ", "_")}";
+            var tagId = await _tagRepository.GetOrCreateTagAsync(tagName, "Person", true);
+            await _tagRepository.AddTagToPhotoAsync(face.PhotoId, tagId, face.Confidence, "FaceAgent");
+
+            // Recargar grupos
+            LoadGroups();
+
+            var statusText = FindName("StatusText") as System.Windows.Controls.TextBlock;
+            if (statusText != null) statusText.Text = $"Nombre '{newName}' asignado al rostro";
+        }
+    }
+
+
+
+    private async void TestSingleImage_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Seleccionar imagen con rostros",
+            Filter = "Imagenes|*.jpg;*.jpeg;*.png;*.bmp"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            var faceService = new FaceService();
+            var faces = await faceService.DetectFacesAsync(dialog.FileName);
+
+            var statusText = FindName("StatusText") as System.Windows.Controls.TextBlock;
+            if (statusText != null)
+            {
+                statusText.Text = $"Rostros detectados: {faces.Count}";
+            }
+
+            MessageBox.Show($"Se detectaron {faces.Count} rostros en la imagen",
+                            "Resultado", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    private void ViewPhotos_Click(object sender, RoutedEventArgs e)
+    {
+        var button = sender as System.Windows.Controls.Button;
+        var group = button?.Tag as PersonGroup;
+
+        if (group == null) return;
+
+        var photoIds = group.Faces.Select(f => f.PhotoId).Distinct().ToList();
+        var photosWindow = new PhotosByPersonWindow(photoIds, group.DisplayName);
+        photosWindow.Owner = this;
+        photosWindow.ShowDialog();
+    }
+
+
+
+    private async void ReprocessFaces_Click(object sender, RoutedEventArgs e)
+    {
+        var statusText = FindName("StatusText") as System.Windows.Controls.TextBlock;
+        var reprocessBtn = sender as System.Windows.Controls.Button;
+
+        if (statusText != null) statusText.Text = "Reprocesando rostros...";
+        if (reprocessBtn != null) reprocessBtn.IsEnabled = false;
+
+        try
+        {
+            // Eliminar todos los rostros existentes
+            await _faceRepository.DeleteAllFacesAsync();
+
+            var allPhotos = await _photoRepository.GetPhotosAsync(limit: 10000);
+            var total = allPhotos.Count();
+            var processed = 0;
+            var totalFaces = 0;
+
+            var faceService = new FaceService();
+
+            foreach (var photo in allPhotos)
+            {
+                var faces = await faceService.DetectFacesAsync(photo.Path);
+
+                foreach (var detectedFace in faces)
+                {
+                    // Guardar cada rostro individualmente (sin agrupar)
+                    var face = new Face
+                    {
+                        PhotoId = photo.Id,
+                        PersonName = null,
+                        PersonId = null,
+                        X = detectedFace.X,
+                        Y = detectedFace.Y,
+                        Width = detectedFace.Width,
+                        Height = detectedFace.Height,
+                        Confidence = detectedFace.Confidence,
+                        IsUserConfirmed = false,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await _faceRepository.InsertFaceAsync(face);
+                    totalFaces++;
+                }
+
+                processed++;
+                if (processed % 10 == 0 && statusText != null)
+                {
+                    statusText.Text = $"Procesando: {processed}/{total} fotos - Rostros encontrados: {totalFaces}";
+                }
+            }
+
+            if (statusText != null) statusText.Text = $"Completado: {totalFaces} rostros encontrados en {total} fotos";
+
+            // Recargar grupos
+            LoadGroups();
+        }
+        catch (Exception ex)
+        {
+            var statusText2 = FindName("StatusText") as System.Windows.Controls.TextBlock;
+            if (statusText2 != null) statusText2.Text = $"Error: {ex.Message}";
+            MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            if (reprocessBtn != null) reprocessBtn.IsEnabled = true;
+        }
+    }
+
+    private List<List<(Photo photo, DetectedFace detectedFace, float[] embedding)>> ClusterFaces(
+        List<(Photo photo, DetectedFace detectedFace, float[] embedding)> faces)
+    {
+        var groups = new List<List<(Photo photo, DetectedFace detectedFace, float[] embedding)>>();
+        var used = new bool[faces.Count];
+
+        for (int i = 0; i < faces.Count; i++)
+        {
+            if (used[i]) continue;
+
+            var group = new List<(Photo, DetectedFace, float[])> { faces[i] };
+            used[i] = true;
+
+            for (int j = i + 1; j < faces.Count; j++)
+            {
+                if (used[j]) continue;
+
+                var similarity = CosineSimilarity(faces[i].embedding, faces[j].embedding);
+
+                // Si la similitud es mayor a 0.6, son la misma persona
+                if (similarity > 0.6f)
+                {
+                    group.Add(faces[j]);
+                    used[j] = true;
+                }
+            }
+
+            groups.Add(group);
+        }
+
+        return groups;
+    }
+
+
+    private float CosineSimilarity(float[] a, float[] b)
+    {
+        if (a.Length != b.Length) return 0;
+
+        float dot = 0, magA = 0, magB = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            magA += a[i] * a[i];
+            magB += b[i] * b[i];
+        }
+
+        magA = (float)Math.Sqrt(magA);
+        magB = (float)Math.Sqrt(magB);
+
+        return magA == 0 || magB == 0 ? 0 : dot / (magA * magB);
+    }
+
+    private byte[] SerializeEmbedding(float[] embedding)
+    {
+        var bytes = new byte[embedding.Length * 4];
+        Buffer.BlockCopy(embedding, 0, bytes, 0, bytes.Length);
+        return bytes;
+    }
+
+}
+
+public class PersonGroup
+{
+    public string Id { get; set; } = string.Empty;
+    public List<Face> Faces { get; set; } = new();
+    public string DisplayName { get; set; } = string.Empty;
+    public List<string> FaceThumbnails { get; set; } = new();
+    public int FaceCount => Faces.Count;
+    public int PhotoCount => Faces.Select(f => f.PhotoId).Distinct().Count();
+}
+
+public class InputDialog : Window
+{
+    private System.Windows.Controls.TextBox txtInput = new System.Windows.Controls.TextBox();
+    private System.Windows.Controls.Button btnOk = new System.Windows.Controls.Button();
+    private System.Windows.Controls.Button btnCancel = new System.Windows.Controls.Button();
+
+    public string Answer { get; private set; } = string.Empty;
+
+    public InputDialog(string title, string prompt, string defaultValue = "")
+    {
+        Title = title;
+        Width = 400;
+        Height = 180;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        ResizeMode = ResizeMode.NoResize;
+        Background = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(37, 37, 37));
+
+        var stackPanel = new System.Windows.Controls.StackPanel { Margin = new Thickness(20) };
+
+        stackPanel.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = prompt,
+            Foreground = System.Windows.Media.Brushes.White,
+            Margin = new Thickness(0, 0, 0, 10),
+            FontSize = 13
+        });
+
+        txtInput.Text = defaultValue;
+        txtInput.Margin = new Thickness(0, 0, 0, 20);
+        txtInput.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(45, 45, 45));
+        txtInput.Foreground = System.Windows.Media.Brushes.White;
+        txtInput.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(68, 68, 68));
+        stackPanel.Children.Add(txtInput);
+
+        var buttonPanel = new System.Windows.Controls.StackPanel
+        {
+            Orientation = System.Windows.Controls.Orientation.Horizontal,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right
+        };
+
+        btnOk.Content = "Aceptar";
+        btnOk.Width = 80;
+        btnOk.Margin = new Thickness(0, 0, 10, 0);
+        btnOk.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 120, 212));
+        btnOk.Foreground = System.Windows.Media.Brushes.White;
+        btnOk.BorderThickness = new Thickness(0);
+        btnOk.Cursor = System.Windows.Input.Cursors.Hand;
+        btnOk.Click += (s, e) => { Answer = txtInput.Text; DialogResult = true; };
+        buttonPanel.Children.Add(btnOk);
+
+        btnCancel.Content = "Cancelar";
+        btnCancel.Width = 80;
+        btnCancel.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(45, 45, 45));
+        btnCancel.Foreground = System.Windows.Media.Brushes.White;
+        btnCancel.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(68, 68, 68));
+        btnCancel.Cursor = System.Windows.Input.Cursors.Hand;
+        btnCancel.Click += (s, e) => { DialogResult = false; };
+        buttonPanel.Children.Add(btnCancel);
+
+        stackPanel.Children.Add(buttonPanel);
+        Content = stackPanel;
+    }
+}

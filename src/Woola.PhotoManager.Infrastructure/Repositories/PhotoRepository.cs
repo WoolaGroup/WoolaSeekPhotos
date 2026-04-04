@@ -81,6 +81,29 @@ public class PhotoRepository
         return await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Photos");
     }
 
+    public async Task<Photo?> GetPhotoByIdAsync(int id)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+
+        const string sql = @"
+        SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height,
+               Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation,
+               Status, ThumbnailPath, CreatedAt, LastIndexedAt
+        FROM Photos
+        WHERE Id = @Id
+    ";
+
+        var photo = await connection.QueryFirstOrDefaultAsync<Photo>(sql, new { Id = id });
+
+        if (photo?.DateTaken != null && photo.DateTaken.HasValue)
+        {
+            // Ya está en el formato correcto
+        }
+
+        return photo;
+    }
+    
+ 
     public async Task<IEnumerable<Photo>> SearchPhotosAsync(string searchTerm, int limit = 100)
     {
         using var connection = _connectionFactory.CreateConnection();

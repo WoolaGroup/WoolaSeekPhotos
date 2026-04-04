@@ -121,17 +121,22 @@ public class PhotoIndexer : IPhotoIndexer
             await SaveBatchAsync(batch, cancellationToken);
     }
 
+
+
+
+
     private async Task SaveBatchAsync(List<Photo> batch, CancellationToken cancellationToken)
     {
+        Console.WriteLine($"[Indexer] Guardando batch de {batch.Count} fotos");
+
         foreach (var photo in batch)
         {
             var photoId = await _photoRepository.InsertPhotoAsync(photo);
             photo.Id = photoId;
-
-            // ✅ Ejecutar todos los agentes registrados (MetadataAgent, AutoTaggingAgent, VisionAgent)
-            await _agentOrchestrator.ProcessPhotoAsync(photo, cancellationToken);
+            Console.WriteLine($"[Indexer] Foto guardada ID: {photoId}");
         }
 
+        // Generar thumbnails
         foreach (var photo in batch)
         {
             try
@@ -140,9 +145,13 @@ public class PhotoIndexer : IPhotoIndexer
                 photo.ThumbnailPath = thumbnailPath;
                 await _photoRepository.UpdateThumbnailPathAsync(photo.Id, thumbnailPath);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Indexer] Error generando thumbnail: {ex.Message}");
+            }
         }
     }
+
 
 
     private async Task<Photo> CreatePhotoFromFileAsync(string filePath, string hash)
