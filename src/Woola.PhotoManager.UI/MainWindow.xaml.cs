@@ -2,6 +2,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using Microsoft.Extensions.Logging;
 using Woola.PhotoManager.Common.Services;
 using Woola.PhotoManager.Core.Agents;
 using Woola.PhotoManager.Core.Agents.Agents;
@@ -63,7 +64,7 @@ public partial class MainWindow : Window
         var ocrAgent = new OcrAgent(ocrService);
         var faceAgent = new FaceAgent(faceService, faceRepository, _tagRepository);
 
-        var orchestrator = new AgentOrchestrator(_tagRepository);
+        var orchestrator = new AgentOrchestrator(_tagRepository, Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentOrchestrator>.Instance);
         orchestrator.RegisterAgent(metadataAgent);
         orchestrator.RegisterAgent(autoTaggingAgent);
         orchestrator.RegisterAgent(visionAgent);

@@ -14,7 +14,6 @@ public class PhotoIndexer : IPhotoIndexer
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isRunning;
     private readonly IAgentOrchestrator _agentOrchestrator;
-    private readonly IAutoTaggingService _autoTaggingService;
 
     public PhotoIndexer(
      PhotoRepository photoRepository,
@@ -36,18 +35,6 @@ public class PhotoIndexer : IPhotoIndexer
 
     public event EventHandler<IndexingProgress>? ProgressChanged;
     public bool IsRunning => _isRunning;
-
-    public PhotoIndexer(
-        PhotoRepository photoRepository,
-        TagRepository tagRepository,
-        IThumbnailService thumbnailService,
-        IMetadataService metadataService)
-    {
-        _photoRepository = photoRepository;
-        _tagRepository = tagRepository;
-        _thumbnailService = thumbnailService;
-        _metadataService = metadataService;
-    }
 
     public async Task StartIndexingAsync(string rootPath, CancellationToken cancellationToken = default)
     {
@@ -148,6 +135,20 @@ public class PhotoIndexer : IPhotoIndexer
             catch (Exception ex)
             {
                 Console.WriteLine($"[Indexer] Error generando thumbnail: {ex.Message}");
+            }
+        }
+
+        // Procesar con agentes IA (metadata, tags, visión, OCR, rostros)
+        foreach (var photo in batch)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            try
+            {
+                await _agentOrchestrator.ProcessPhotoAsync(photo, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Indexer] Error procesando agentes para foto {photo.Id}: {ex.Message}");
             }
         }
     }

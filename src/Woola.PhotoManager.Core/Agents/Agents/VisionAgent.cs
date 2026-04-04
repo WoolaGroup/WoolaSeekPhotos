@@ -14,19 +14,19 @@ public class VisionAgent : IAgent
     public int Priority => 3;
     public bool IsEnabled { get; set; } = true;
 
-    // Lista de colores para detectar
-    private readonly Dictionary<string, (byte rMin, byte rMax, byte gMin, byte gMax, byte bMin, byte bMax)> _colorRanges = new()
+    // Rangos HSV para detección de colores. H: 0-360°, S: 0-100%, V: 0-100%
+    // Formato: (hMin, hMax, sMin, vMin) - neutrales usan sMax y vMax en lugar de hMin/hMax
+    private static readonly (string Name, float HMin, float HMax, float SMin, float VMin, float VMax)[] _hsvColors =
     {
-        { "rojo", (180, 255, 0, 100, 0, 100) },
-        { "verde", (0, 100, 180, 255, 0, 100) },
-        { "azul", (0, 100, 0, 100, 180, 255) },
-        { "amarillo", (200, 255, 200, 255, 0, 100) },
-        { "naranja", (200, 255, 100, 180, 0, 80) },
-        { "morado", (150, 255, 0, 100, 150, 255) },
-        { "rosa", (200, 255, 100, 180, 150, 255) },
-        { "negro", (0, 50, 0, 50, 0, 50) },
-        { "blanco", (200, 255, 200, 255, 200, 255) },
-        { "gris", (80, 150, 80, 150, 80, 150) }
+        ("rojo",    350, 360,  50, 20, 100),
+        ("rojo",      0,  10,  50, 20, 100),   // rojo tiene dos rangos de hue
+        ("naranja",  10,  30,  50, 20, 100),
+        ("amarillo", 30,  60,  50, 40, 100),
+        ("verde",    60, 150,  40, 20, 100),
+        ("cian",    150, 195,  40, 30, 100),
+        ("azul",    195, 260,  40, 20, 100),
+        ("morado",  260, 310,  30, 20, 100),
+        ("rosa",    310, 350,  30, 60, 100),
     };
 
     public VisionAgent(IObjectDetectionService objectDetectionService)
@@ -66,15 +66,15 @@ public class VisionAgent : IAgent
                 });
             }
 
-            // Detectar colores dominantes en la imagen
+            // Detectar colores dominantes con confianza basada en proporción de píxeles
             var dominantColors = DetectDominantColors(photo.Path);
-            foreach (var color in dominantColors)
+            foreach (var (colorName, confidence) in dominantColors)
             {
                 result.Tags.Add(new AgentTag
                 {
-                    Name = $"color_{color}",
+                    Name = $"color_{colorName}",
                     Category = "Color",
-                    Confidence = 0.7,
+                    Confidence = confidence,
                     Source = Name
                 });
             }
@@ -115,126 +115,104 @@ public class VisionAgent : IAgent
     }
 
     /// <summary>
-    /// Detecta los colores dominantes en una imagen
+    /// Detecta colores dominantes usando espacio HSV para mayor precisión.
+    /// Retorna colores con su porcentaje de presencia como confianza.
     /// </summary>
-    private List<string> DetectDominantColors(string imagePath)
+    private List<(string Name, float Confidence)> DetectDominantColors(string imagePath)
     {
-        var detectedColors = new List<string>();
+        var results = new List<(string Name, float Confidence)>();
 
         try
         {
             using var image = Image.Load<Rgb24>(imagePath);
 
-            // Muestrear píxeles para detectar colores dominantes
+            // Paso de muestreo adaptativo: ~20px en imágenes grandes, 10px en pequeñas
+            var step = Math.Max(10, Math.Min(image.Width, image.Height) / 100);
+
             var colorCounts = new Dictionary<string, int>();
+            var achromaticCount = 0; // negro, blanco, gris
+            var totalSamples = 0;
 
-            // Inicializar contadores
-            foreach (var colorName in _colorRanges.Keys)
+            for (int y = 0; y < image.Height; y += step)
             {
-                colorCounts[colorName] = 0;
-            }
-
-            // Muestrear la imagen (cada 50 píxeles para rendimiento)
-            for (int y = 0; y < image.Height; y += 50)
-            {
-                for (int x = 0; x < image.Width; x += 50)
+                for (int x = 0; x < image.Width; x += step)
                 {
-                    var pixel = image[x, y];
-                    var colorName = GetColorName(pixel.R, pixel.G, pixel.B);
+                    var p = image[x, y];
+                    RgbToHsv(p.R, p.G, p.B, out var h, out var s, out var v);
+                    totalSamples++;
 
-                    if (colorName != null && colorCounts.ContainsKey(colorName))
+                    // Clasificar acromáticos primero (sin saturación relevante)
+                    if (v < 15f) { achromaticCount++; continue; }            // negro
+                    if (v > 85f && s < 15f) { achromaticCount++; continue; } // blanco
+                    if (s < 20f) { achromaticCount++; continue; }            // gris
+
+                    // Clasificar cromáticos por rango HSV
+                    var colorName = GetHsvColorName(h, s, v);
+                    if (colorName != null)
                     {
-                        colorCounts[colorName]++;
+                        colorCounts.TryGetValue(colorName, out var cnt);
+                        colorCounts[colorName] = cnt + 1;
                     }
                 }
             }
 
-            // Obtener colores con más del 10% de la muestra
-            var totalSamples = colorCounts.Values.Sum();
-            var threshold = totalSamples * 0.05; // 5% mínimo para considerar
+            if (totalSamples == 0) return results;
 
-            foreach (var color in colorCounts)
+            // Solo reportar colores con al menos 8% de presencia
+            const float MinThreshold = 0.08f;
+            foreach (var kv in colorCounts.OrderByDescending(k => k.Value))
             {
-                if (color.Value > threshold)
-                {
-                    detectedColors.Add(color.Key);
-                }
+                var ratio = kv.Value / (float)totalSamples;
+                if (ratio >= MinThreshold)
+                    results.Add((kv.Key, Math.Min(ratio * 1.5f, 1.0f))); // escalar confianza
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error detectando colores: {ex.Message}");
+            Console.WriteLine($"[VisionAgent] Error detectando colores: {ex.Message}");
         }
 
-        return detectedColors.Distinct().Take(3).ToList(); // Máximo 3 colores
+        return results.Take(3).ToList(); // máximo 3 colores dominantes
     }
 
     /// <summary>
-    /// Determina el nombre del color basado en valores RGB
+    /// Convierte RGB (0-255) a HSV: H en grados (0-360), S y V en porcentaje (0-100).
     /// </summary>
-    private string? GetColorName(byte r, byte g, byte b)
+    private static void RgbToHsv(byte r, byte g, byte b, out float h, out float s, out float v)
     {
-        foreach (var color in _colorRanges)
-        {
-            var range = color.Value;
-            if (r >= range.rMin && r <= range.rMax &&
-                g >= range.gMin && g <= range.gMax &&
-                b >= range.bMin && b <= range.bMax)
-            {
-                return color.Key;
-            }
-        }
+        var rf = r / 255f;
+        var gf = g / 255f;
+        var bf = b / 255f;
 
+        var max = Math.Max(rf, Math.Max(gf, bf));
+        var min = Math.Min(rf, Math.Min(gf, bf));
+        var delta = max - min;
+
+        v = max * 100f;
+        s = max < 0.001f ? 0f : (delta / max) * 100f;
+
+        if (delta < 0.001f) { h = 0f; return; }
+
+        if (max == rf)
+            h = 60f * (((gf - bf) / delta) % 6f);
+        else if (max == gf)
+            h = 60f * (((bf - rf) / delta) + 2f);
+        else
+            h = 60f * (((rf - gf) / delta) + 4f);
+
+        if (h < 0f) h += 360f;
+    }
+
+    /// <summary>
+    /// Clasifica un píxel HSV en un nombre de color. Retorna null si no encaja en ningún rango.
+    /// </summary>
+    private static string? GetHsvColorName(float h, float s, float v)
+    {
+        foreach (var (name, hMin, hMax, sMin, vMin, vMax) in _hsvColors)
+        {
+            if (s >= sMin && v >= vMin && v <= vMax && h >= hMin && h <= hMax)
+                return name;
+        }
         return null;
-    }
-
-    /// <summary>
-    /// Versión simplificada para detectar color principal (sin muestreo)
-    /// </summary>
-    private string GetDominantColorSimple(string imagePath)
-    {
-        try
-        {
-            using var image = Image.Load<Rgb24>(imagePath);
-
-            long totalR = 0, totalG = 0, totalB = 0;
-            var pixels = 0;
-
-            // Muestrear para rendimiento
-            for (int y = 0; y < image.Height; y += 50)
-            {
-                for (int x = 0; x < image.Width; x += 50)
-                {
-                    var pixel = image[x, y];
-                    totalR += pixel.R;
-                    totalG += pixel.G;
-                    totalB += pixel.B;
-                    pixels++;
-                }
-            }
-
-            if (pixels == 0) return "desconocido";
-
-            var avgR = totalR / pixels;
-            var avgG = totalG / pixels;
-            var avgB = totalB / pixels;
-
-            // Determinar color dominante
-            if (avgR > 200 && avgG < 100 && avgB < 100) return "rojo";
-            if (avgR < 100 && avgG > 200 && avgB < 100) return "verde";
-            if (avgR < 100 && avgG < 100 && avgB > 200) return "azul";
-            if (avgR > 200 && avgG > 200 && avgB < 100) return "amarillo";
-            if (avgR > 200 && avgG > 150 && avgB < 80) return "naranja";
-            if (avgR > 150 && avgG < 100 && avgB > 150) return "morado";
-            if (avgR > 200 && avgG < 150 && avgB > 150) return "rosa";
-            if (avgR < 50 && avgG < 50 && avgB < 50) return "negro";
-            if (avgR > 200 && avgG > 200 && avgB > 200) return "blanco";
-
-            return "otro";
-        }
-        catch
-        {
-            return "desconocido";
-        }
     }
 }

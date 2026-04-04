@@ -20,8 +20,8 @@ public class FaceRepository
         using var connection = _connectionFactory.CreateConnection();
 
         const string sql = @"
-            INSERT INTO Faces (PhotoId, PersonName, PersonId, X, Y, Width, Height, Confidence, IsUserConfirmed, CreatedAt)
-            VALUES (@PhotoId, @PersonName, @PersonId, @X, @Y, @Width, @Height, @Confidence, @IsUserConfirmed, @CreatedAt);
+            INSERT INTO Faces (PhotoId, PersonName, PersonId, X, Y, Width, Height, Encoding, Confidence, IsUserConfirmed, CreatedAt)
+            VALUES (@PhotoId, @PersonName, @PersonId, @X, @Y, @Width, @Height, @Encoding, @Confidence, @IsUserConfirmed, @CreatedAt);
             SELECT last_insert_rowid();
         ";
 
@@ -34,6 +34,7 @@ public class FaceRepository
             face.Y,
             face.Width,
             face.Height,
+            face.Encoding,
             face.Confidence,
             face.IsUserConfirmed,
             CreatedAt = DateTime.UtcNow.ToIsoString()

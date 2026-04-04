@@ -29,61 +29,46 @@ public class SemanticSearchService : ISemanticSearchService
 
         var queryLower = query.ToLower();
         var results = new List<(Photo photo, float score)>();
+        float[]? queryEmbedding = null;
 
-        // Obtener todas las fotos
+        if (_embeddingService.IsAvailable)
+            queryEmbedding = _embeddingService.GenerateEmbedding(query);
+
         var allPhotos = await _photoRepository.GetPhotosAsync(limit: 10000);
 
         foreach (var photo in allPhotos)
         {
             var score = 0f;
 
-            // 1. Búsqueda por coincidencia exacta en tags (rápida y precisa)
+            // 1. Coincidencia en tags ponderada por confianza real del agente
             var photoTags = await _tagRepository.GetTagsForPhotoAsync(photo.Id);
-            var tagNames = photoTags.Select(t => t.Name.ToLower()).ToList();
+            var tagList = photoTags.ToList();
+            var tagNames = tagList.Select(t => t.Name.ToLower()).ToList();
 
-            foreach (var tag in tagNames)
+            foreach (var tag in tagList)
             {
-                if (tag.Contains(queryLower))
-                    score += 0.8f;
-
-                // Palabras clave relacionadas
-                if (queryLower.Contains("niño") && (tag.Contains("persona") || tag.Contains("rostro")))
-                    score += 0.5f;
-
-                if (queryLower.Contains("rojo") && tag.Contains("rojo"))
-                    score += 0.9f;
-
-                if (queryLower.Contains("azul") && tag.Contains("azul"))
-                    score += 0.9f;
-
-                if (queryLower.Contains("perro") && tag.Contains("perro"))
-                    score += 0.9f;
-
-                if (queryLower.Contains("gato") && tag.Contains("gato"))
-                    score += 0.9f;
-
-                if (queryLower.Contains("auto") && (tag.Contains("auto") || tag.Contains("coche")))
-                    score += 0.9f;
+                var tagLower = tag.Name.ToLower();
+                if (tagLower.Contains(queryLower) || queryLower.Contains(tagLower))
+                    score += 0.8f * tag.Confidence;
             }
 
-            // 2. Búsqueda en nombre de archivo
+            // 2. Coincidencia en nombre de archivo
             if (photo.FileName.ToLower().Contains(queryLower))
-                score += 0.6f;
+                score += 0.4f;
 
-            // 3. Búsqueda semántica con embeddings (si está disponible)
-            if (_embeddingService.IsAvailable && score < 0.5f)
+            // 3. Búsqueda semántica con embeddings (siempre, no solo como fallback)
+            if (queryEmbedding != null && tagNames.Count > 0)
             {
                 var combinedText = string.Join(" ", tagNames) + " " + photo.FileName;
                 var photoEmbedding = _embeddingService.GenerateEmbedding(combinedText);
-                var queryEmbedding = _embeddingService.GenerateEmbedding(query);
                 var semanticScore = _embeddingService.CosineSimilarity(queryEmbedding, photoEmbedding);
-                score += semanticScore * 0.7f;
+                // Peso semántico mayor si hay pocos tags exactos
+                var semanticWeight = score < 0.3f ? 0.7f : 0.3f;
+                score += semanticScore * semanticWeight;
             }
 
             if (score > 0.1f)
-            {
                 results.Add((photo, Math.Min(score, 1.0f)));
-            }
         }
 
         return results.OrderByDescending(r => r.score)

@@ -1,4 +1,5 @@
-﻿using Woola.PhotoManager.Domain.Entities;
+﻿using Microsoft.Extensions.Logging;
+using Woola.PhotoManager.Domain.Entities;
 using Woola.PhotoManager.Infrastructure.Repositories;
 
 namespace Woola.PhotoManager.Core.Agents;
@@ -15,10 +16,15 @@ public class AgentOrchestrator : IAgentOrchestrator
 {
     private readonly List<IAgent> _agents = new();
     private readonly TagRepository _tagRepository;
+    private readonly ILogger<AgentOrchestrator> _logger;
 
-    public AgentOrchestrator(TagRepository tagRepository)
+    // Timeout máximo por agente para que un fallo no bloquee el batch
+    private const int AgentTimeoutSeconds = 30;
+
+    public AgentOrchestrator(TagRepository tagRepository, ILogger<AgentOrchestrator> logger)
     {
         _tagRepository = tagRepository;
+        _logger = logger;
     }
 
     public void RegisterAgent(IAgent agent)
@@ -31,9 +37,7 @@ public class AgentOrchestrator : IAgentOrchestrator
     {
         var agent = _agents.FirstOrDefault(a => a.Name == agentName);
         if (agent != null)
-        {
             agent.IsEnabled = enable;
-        }
     }
 
     public List<IAgent> GetAgents() => _agents.ToList();
@@ -48,19 +52,36 @@ public class AgentOrchestrator : IAgentOrchestrator
 
             if (!agent.CanProcess(photo)) continue;
 
+            // Timeout individual por agente: evita que OCR/ONNX bloqueen el batch completo
+            using var agentTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            agentTimeout.CancelAfter(TimeSpan.FromSeconds(AgentTimeoutSeconds));
+
             try
             {
-                var result = await agent.ExecuteAsync(photo, cancellationToken);
+                var result = await agent.ExecuteAsync(photo, agentTimeout.Token);
 
-                if (result.Success && result.Tags.Any())
+                if (result.Success && result.Tags.Count > 0)
                 {
                     combinedResult.Tags.AddRange(result.Tags);
                     await SaveTagsToDatabase(photo.Id, result.Tags, agent.Name);
+                    _logger.LogDebug("{Agent} procesó foto {PhotoId}: {TagCount} tags en {Ms}ms",
+                        agent.Name, photo.Id, result.Tags.Count, (int)result.ProcessingTimeMs);
                 }
+                else if (!result.Success)
+                {
+                    _logger.LogWarning("{Agent} falló en foto {PhotoId}: {Error}",
+                        agent.Name, photo.Id, result.ErrorMessage);
+                }
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning("{Agent} superó el timeout de {Seconds}s en foto {PhotoId}",
+                    agent.Name, AgentTimeoutSeconds, photo.Id);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error en agente {agent.Name}: {ex.Message}");
+                _logger.LogError(ex, "{Agent} lanzó excepción en foto {PhotoId}",
+                    agent.Name, photo.Id);
             }
         }
 

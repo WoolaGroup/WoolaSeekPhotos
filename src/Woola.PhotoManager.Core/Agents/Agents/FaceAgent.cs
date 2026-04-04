@@ -33,17 +33,70 @@ public class FaceAgent : IAgent
 
     public async Task<AgentResult> ExecuteAsync(Photo photo, CancellationToken cancellationToken = default)
     {
-        Console.WriteLine($"[FaceAgent] Procesando foto ID: {photo.Id}");
-
         var startTime = DateTime.Now;
         var result = new AgentResult { AgentName = Name, Success = true };
 
         try
         {
-            var faces = await _faceService.DetectFacesAsync(photo.Path);
-            Console.WriteLine($"[FaceAgent] Foto {photo.Id}: {faces.Count} rostros detectados");
+            await _faceService.DownloadModelsIfNeededAsync();
 
-            // Resto del código...
+            var faces = await _faceService.DetectFacesAsync(photo.Path);
+
+            if (faces.Count == 0)
+            {
+                result.ProcessingTimeMs = (DateTime.Now - startTime).TotalMilliseconds;
+                return result;
+            }
+
+            // Guardar cada rostro en DB y generar su embedding
+            foreach (var detected in faces)
+            {
+                if (cancellationToken.IsCancellationRequested) break;
+
+                float[]? embedding = null;
+                try
+                {
+                    embedding = await _faceService.GenerateEmbeddingAsync(photo.Path, detected);
+                }
+                catch
+                {
+                    // Si el embedding falla, guardamos igualmente el bounding box
+                }
+
+                await _faceRepository.InsertFaceAsync(new Face
+                {
+                    PhotoId = photo.Id,
+                    X = detected.X,
+                    Y = detected.Y,
+                    Width = detected.Width,
+                    Height = detected.Height,
+                    Confidence = detected.Confidence,
+                    Encoding = embedding != null ? SerializeEmbedding(embedding) : null,
+                    IsUserConfirmed = false
+                });
+            }
+
+            // Tags de presencia y cantidad de rostros
+            result.Tags.Add(new AgentTag
+            {
+                Name = "con_rostros",
+                Category = "Feature",
+                Confidence = 1.0,
+                Source = Name
+            });
+
+            if (faces.Count >= 2)
+            {
+                result.Tags.Add(new AgentTag
+                {
+                    Name = $"rostros_{faces.Count}",
+                    Category = "Feature",
+                    Confidence = 1.0,
+                    Source = Name
+                });
+            }
+
+            result.ProcessingTimeMs = (DateTime.Now - startTime).TotalMilliseconds;
         }
         catch (Exception ex)
         {
@@ -55,7 +108,7 @@ public class FaceAgent : IAgent
         return result;
     }
 
-    private byte[] SerializeEmbedding(float[] embedding)
+    private static byte[] SerializeEmbedding(float[] embedding)
     {
         var bytes = new byte[embedding.Length * 4];
         Buffer.BlockCopy(embedding, 0, bytes, 0, bytes.Length);
