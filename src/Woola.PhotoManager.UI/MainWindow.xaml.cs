@@ -1,11 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Win32;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
+using System.Windows.Input;
 using Woola.PhotoManager.Common.Services;
 using Woola.PhotoManager.Core.Agents;
 using Woola.PhotoManager.Core.Agents.Agents;
@@ -13,10 +9,7 @@ using Woola.PhotoManager.Core.Services;
 using Woola.PhotoManager.Domain.Entities;
 using Woola.PhotoManager.Infrastructure.Database;
 using Woola.PhotoManager.Infrastructure.Repositories;
-using Button = System.Windows.Controls.Button;
-using Color = System.Windows.Media.Color;
 using MessageBox = System.Windows.MessageBox;
-
 
 namespace Woola.PhotoManager.UI;
 
@@ -24,9 +17,11 @@ public partial class MainWindow : Window
 {
     private IPhotoIndexer? _photoIndexer;
     private PhotoRepository? _photoRepository;
-    private TagRepository? _tagRepository;  // ← Agregar esta línea
+    private TagRepository? _tagRepository;
+    private ISemanticSearchService? _semanticSearchService;
     private CancellationTokenSource? _indexingCts;
     private ObservableCollection<PhotoViewModel> _photos = new();
+    private bool _isSemanticSearch = false;
 
     public MainWindow()
     {
@@ -39,107 +34,45 @@ public partial class MainWindow : Window
 
         FilterAllBtn.Click += FilterAllBtn_Click;
         FilterRecentBtn.Click += FilterRecentBtn_Click;
-
-        // ✅ NUEVO: Verificar y reprocesar rostros si es necesario
-        CheckAndReprocessFacesIfPhotosExist();
     }
 
-    private async void CheckAndReprocessFacesIfPhotosExist()
+    private void InitializeServices()
     {
-        var photoCount = await _photoRepository.GetTotalCountAsync();
+        var dbPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Woola",
+            "woola.db");
 
-        // Solo preguntar si hay fotos y no hay rostros
-        if (photoCount > 0)
-        {
-            var faceRepository = new FaceRepository(
-                new SqliteConnectionFactory(Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Woola", "woola.db")));
+        var connectionFactory = new SqliteConnectionFactory(dbPath);
+        _photoRepository = new PhotoRepository(connectionFactory);
+        _tagRepository = new TagRepository(connectionFactory);
+        var faceRepository = new FaceRepository(connectionFactory);
 
-            var existingFaces = await faceRepository.GetAllFacesAsync();
+        var thumbnailService = new ThumbnailService();
+        var metadataService = new MetadataService();
+        var objectDetectionService = new ObjectDetectionService();
+        var ocrService = new OcrService();
+        var faceService = new FaceService();
 
-            if (!existingFaces.Any())
-            {
-                var result = MessageBox.Show($"Hay {photoCount} fotos sin rostros detectados. ¿Desea procesarlas para detectar rostros?",
-                                              "Detectar Rostros", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        var textEmbeddingService = new TextEmbeddingService();
+        _semanticSearchService = new SemanticSearchService(_photoRepository, _tagRepository, textEmbeddingService);
 
-                if (result == MessageBoxResult.Yes)
-                {
-                    await ReprocessAllFaces();
-                }
-            }
-        }
+        var metadataAgent = new MetadataAgent(metadataService);
+        var autoTaggingAgent = new AutoTaggingAgent(_tagRepository);
+        var visionAgent = new VisionAgent(objectDetectionService);
+        var ocrAgent = new OcrAgent(ocrService);
+        var faceAgent = new FaceAgent(faceService, faceRepository, _tagRepository);
+
+        var orchestrator = new AgentOrchestrator(_tagRepository);
+        orchestrator.RegisterAgent(metadataAgent);
+        orchestrator.RegisterAgent(autoTaggingAgent);
+        orchestrator.RegisterAgent(visionAgent);
+        orchestrator.RegisterAgent(ocrAgent);
+        orchestrator.RegisterAgent(faceAgent);
+
+        _photoIndexer = new PhotoIndexer(_photoRepository, _tagRepository, thumbnailService, metadataService, orchestrator);
+        _photoIndexer.ProgressChanged += OnIndexingProgress;
     }
-
-
-    private async Task ReprocessAllFaces()
-    {
-        StatusText.Text = "Reprocesando rostros...";
-        ProgressBar.IsIndeterminate = true;
-
-        try
-        {
-            var allPhotos = await _photoRepository.GetPhotosAsync(limit: 10000);
-            var faceService = new FaceService();
-            var faceRepository = new FaceRepository(
-                new SqliteConnectionFactory(Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Woola", "woola.db")));
-
-            // Eliminar rostros existentes
-            await faceRepository.DeleteAllFacesAsync();
-
-            var total = allPhotos.Count();
-            var processed = 0;
-            var totalFaces = 0;
-
-            foreach (var photo in allPhotos)
-            {
-                var faces = await faceService.DetectFacesAsync(photo.Path);
-
-                foreach (var detectedFace in faces)
-                {
-                    var face = new Face
-                    {
-                        PhotoId = photo.Id,
-                        X = detectedFace.X,
-                        Y = detectedFace.Y,
-                        Width = detectedFace.Width,
-                        Height = detectedFace.Height,
-                        Confidence = detectedFace.Confidence,
-                        IsUserConfirmed = false,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    await faceRepository.InsertFaceAsync(face);
-                    totalFaces++;
-                }
-
-                processed++;
-                if (processed % 10 == 0)
-                {
-                    StatusText.Text = $"Procesando rostros: {processed}/{total} - Encontrados: {totalFaces}";
-                    await Task.Delay(10);
-                }
-            }
-
-            StatusText.Text = $"Reprocesado completado: {totalFaces} rostros encontrados";
-            MessageBox.Show($"Se detectaron {totalFaces} rostros en {total} fotos.",
-                            "Reprocesado Completo", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-        catch (Exception ex)
-        {
-            StatusText.Text = $"Error: {ex.Message}";
-            MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            ProgressBar.IsIndeterminate = false;
-        }
-    }
-
-    // ✅ NUEVO MÉTODO: Cargar fotos que ya están en la base de datos
-
 
     private async void LoadExistingPhotos()
     {
@@ -148,15 +81,6 @@ public partial class MainWindow : Window
         try
         {
             var photos = await _photoRepository.GetPhotosAsync(limit: 1000);
-
-            Console.WriteLine($"[UI] Cargando {photos.Count()} fotos existentes");
-
-            if (!photos.Any())
-            {
-                StatusText.Text = "No hay fotos. Selecciona una carpeta para comenzar.";
-                return;
-            }
-
             var sortedPhotos = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt);
 
             Dispatcher.Invoke(() =>
@@ -173,12 +97,39 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading photos: {ex.Message}");
             StatusText.Text = $"Error: {ex.Message}";
         }
     }
 
+    private async void LoadPhotoCount()
+    {
+        if (_photoRepository == null) return;
+        var count = await _photoRepository.GetTotalCountAsync();
+        Dispatcher.Invoke(() =>
+        {
+            PhotoCountText.Text = count.ToString();
+        });
+    }
 
+    private async Task LoadPhotosAsync()
+    {
+        if (_photoRepository == null) return;
+
+        var photos = await _photoRepository.GetPhotosAsync(limit: 1000);
+        var sortedPhotos = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt);
+
+        Dispatcher.Invoke(() =>
+        {
+            _photos.Clear();
+            foreach (var photo in sortedPhotos)
+            {
+                _photos.Add(new PhotoViewModel(photo));
+            }
+            PhotoCountText.Text = _photos.Count.ToString();
+            PhotoCountStatus.Text = $"{_photos.Count} fotos";
+            StatusText.Text = $"{_photos.Count} fotos cargadas";
+        });
+    }
 
     private async void LoadTags()
     {
@@ -187,7 +138,7 @@ public partial class MainWindow : Window
         try
         {
             var tags = await _tagRepository.GetAllTagsAsync();
-            var topTags = tags.Take(20); // Mostrar solo los 20 más usados
+            var topTags = tags.Take(20);
 
             Dispatcher.Invoke(() =>
             {
@@ -200,114 +151,14 @@ public partial class MainWindow : Window
         }
     }
 
-    // Click en un tag para filtrar
-    private async void TagButton_Click(object sender, RoutedEventArgs e)
+    private async void SelectFolderBtn_Click(object sender, RoutedEventArgs e)
     {
-        Button? button = sender as Button;
-        var tagName = button?.CommandParameter?.ToString();  // ← Cambiar a CommandParameter
-
-        System.Diagnostics.Debug.WriteLine($"Tag clickeado: {tagName}");
-
-        if (string.IsNullOrEmpty(tagName))
+        if (_photoIndexer == null)
         {
-            StatusText.Text = "Error: Tag no válido";
+            MessageBox.Show("Error: Servicio no inicializado", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
 
-        StatusText.Text = $"Filtrando por tag: {tagName}...";
-
-        try
-        {
-            var photos = await _tagRepository.GetPhotosByTagAsync(tagName, limit: 1000);
-
-            var sortedPhotos = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt);
-
-            Dispatcher.Invoke(() =>
-            {
-                _photos.Clear();
-                foreach (var photo in sortedPhotos)
-                {
-                    _photos.Add(new PhotoViewModel(photo));
-                }
-                PhotoCountStatus.Text = $"{_photos.Count} fotos con tag: {tagName}";
-                StatusText.Text = $"Mostrando {_photos.Count} fotos con tag: {tagName}";
-            });
-        }
-        catch (Exception ex)
-        {
-            StatusText.Text = $"Error: {ex.Message}";
-            System.Diagnostics.Debug.WriteLine($"Error: {ex.Message}");
-        }
-    }
-
-    private async void FilterAllBtn_Click(object sender, RoutedEventArgs e)
-    {
-        StatusText.Text = "Cargando todas las fotos...";
-
-        try
-        {
-            var photos = await _photoRepository.GetPhotosAsync(limit: 1000);
-            var sortedPhotos = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt);
-
-            Dispatcher.Invoke(() =>
-            {
-                _photos.Clear();
-                foreach (var photo in sortedPhotos)
-                {
-                    _photos.Add(new PhotoViewModel(photo));
-                }
-                PhotoCountStatus.Text = $"{_photos.Count} fotos";
-                StatusText.Text = $"Mostrando todas las fotos ({_photos.Count})";
-            });
-        }
-        catch (Exception ex)
-        {
-            StatusText.Text = $"Error: {ex.Message}";
-        }
-    }
-
-
-    private void InitializeServices()
-    {
-        var dbPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Woola",
-            "woola.db");
-
-        var connectionFactory = new SqliteConnectionFactory(dbPath);
-        _photoRepository = new PhotoRepository(connectionFactory);
-        _tagRepository = new TagRepository(connectionFactory);
-        var faceRepository = new FaceRepository(connectionFactory);
-
-        // Servicios
-        var thumbnailService = new ThumbnailService();
-        var metadataService = new MetadataService();
-        var objectDetectionService = new ObjectDetectionService();
-        var ocrService = new OcrService();
-        var faceService = new FaceService();
-
-        // Crear agentes
-        var metadataAgent = new MetadataAgent(metadataService);
-        var autoTaggingAgent = new AutoTaggingAgent(_tagRepository);
-        var visionAgent = new VisionAgent(objectDetectionService);
-        var ocrAgent = new OcrAgent(ocrService);
-        var faceAgent = new FaceAgent(faceService, faceRepository, _tagRepository);
-
-        // Crear orquestador y registrar agentes
-        var orchestrator = new AgentOrchestrator(_tagRepository);
-        orchestrator.RegisterAgent(metadataAgent);
-        orchestrator.RegisterAgent(autoTaggingAgent);
-        orchestrator.RegisterAgent(visionAgent);
-        orchestrator.RegisterAgent(ocrAgent);
-        orchestrator.RegisterAgent(faceAgent);  // ← VERIFICAR QUE ESTÉ
-
-        _photoIndexer = new PhotoIndexer(_photoRepository, _tagRepository, thumbnailService, metadataService, orchestrator);
-        _photoIndexer.ProgressChanged += OnIndexingProgress;
-    }
-
-
-    private async void SelectFolderBtn_Click(object sender, RoutedEventArgs e)
-    {
         using var dialog = new System.Windows.Forms.FolderBrowserDialog();
         dialog.Description = "Seleccionar carpeta de fotos";
         dialog.ShowNewFolderButton = false;
@@ -324,34 +175,8 @@ public partial class MainWindow : Window
 
             try
             {
-                await _photoIndexer!.StartIndexingAsync(folderPath, _indexingCts.Token);
-
-                // ✅ Recargar fotos después de indexar
+                await _photoIndexer.StartIndexingAsync(folderPath, _indexingCts.Token);
                 await LoadPhotosAsync();
-
-                // ✅ Preguntar si quiere detectar rostros en las nuevas fotos
-                var photoCount = await _photoRepository.GetTotalCountAsync();
-                if (photoCount > 0)
-                {
-                    var faceRepository = new FaceRepository(
-                        new SqliteConnectionFactory(Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "Woola", "woola.db")));
-
-                    var existingFaces = await faceRepository.GetAllFacesAsync();
-
-                    if (!existingFaces.Any())
-                    {
-                        var result = MessageBox.Show($"Se indexaron {photoCount} fotos. ¿Desea detectar rostros ahora?",
-                                                      "Detectar Rostros", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
-                        if (result == MessageBoxResult.Yes)
-                        {
-                            await ReprocessAllFaces();
-                            await LoadPhotosAsync(); // Recargar para mostrar tags
-                        }
-                    }
-                }
             }
             catch (Exception ex)
             {
@@ -364,7 +189,6 @@ public partial class MainWindow : Window
             }
         }
     }
-
 
     private async void StopBtn_Click(object sender, RoutedEventArgs e)
     {
@@ -384,6 +208,8 @@ public partial class MainWindow : Window
 
     private async void SearchBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
+        if (_isSemanticSearch) return;
+
         var searchTerm = SearchBox.Text.Trim();
 
         if (string.IsNullOrEmpty(searchTerm))
@@ -395,32 +221,6 @@ public partial class MainWindow : Window
             await SearchPhotosAsync(searchTerm);
         }
     }
-
-
-
-    private async Task LoadPhotosAsync()
-    {
-        if (_photoRepository == null) return;
-
-        var photos = await _photoRepository.GetPhotosAsync(limit: 1000);
-
-        // Ordenar por fecha (más reciente primero)
-        var sortedPhotos = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt);
-
-        Dispatcher.Invoke(() =>
-        {
-            _photos.Clear();
-            foreach (var photo in sortedPhotos)
-            {
-                _photos.Add(new PhotoViewModel(photo));
-            }
-            PhotoCountText.Text = _photos.Count.ToString();
-            PhotoCountStatus.Text = $"{_photos.Count} fotos";
-            StatusText.Text = $"Listo - {_photos.Count} fotos cargadas";
-        });
-    }
-
-
 
     private async Task SearchPhotosAsync(string searchTerm)
     {
@@ -435,39 +235,23 @@ public partial class MainWindow : Window
             {
                 _photos.Add(new PhotoViewModel(photo));
             }
-            PhotoCountText.Text = $"{_photos.Count} resultados";
+            PhotoCountStatus.Text = $"{_photos.Count} resultados";
         });
     }
 
-    private async void LoadPhotoCount()
+    private async void FilterAllBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (_photoRepository == null) return;
-        var count = await _photoRepository.GetTotalCountAsync();
-        Dispatcher.Invoke(() =>
-        {
-            PhotoCountText.Text = $"{count} fotos";
-        });
+        _isSemanticSearch = false;
+        SearchModeIndicator.Visibility = Visibility.Collapsed;
+        await LoadPhotosAsync();
+        StatusText.Text = $"Mostrando todas las fotos ({_photos.Count})";
     }
 
-    // Botón de Modo Presentación
-    private async void PresentationBtn_Click(object sender, RoutedEventArgs e)
-    {
-        if (_photos.Count == 0)
-        {
-            System.Windows.MessageBox.Show("No hay fotos para mostrar en modo presentación.",
-                            "Sin fotos", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        var presentationWindow = new PresentationWindow(_photos.Select(p => p.ThumbnailPath).ToList());
-        presentationWindow.ShowDialog();
-    }
-
-
-
-    // Filtro: Últimos 30 días
     private async void FilterRecentBtn_Click(object sender, RoutedEventArgs e)
     {
+        _isSemanticSearch = false;
+        SearchModeIndicator.Visibility = Visibility.Collapsed;
+
         var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
 
         if (_photoRepository == null) return;
@@ -487,41 +271,151 @@ public partial class MainWindow : Window
         });
     }
 
-    private async void ReprocessTagsBtn_Click(object sender, RoutedEventArgs e)
+    private async void TagButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_photoRepository == null || _tagRepository == null)
+        var button = sender as System.Windows.Controls.Button;
+        var tagName = button?.CommandParameter?.ToString();
+
+        if (string.IsNullOrEmpty(tagName)) return;
+
+        _isSemanticSearch = false;
+        SearchModeIndicator.Visibility = Visibility.Collapsed;
+
+        try
         {
-            MessageBox.Show("Servicios no inicializados", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            var photos = await _tagRepository.GetPhotosByTagAsync(tagName, limit: 500);
+            var sortedPhotos = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt);
+
+            Dispatcher.Invoke(() =>
+            {
+                _photos.Clear();
+                foreach (var photo in sortedPhotos)
+                {
+                    _photos.Add(new PhotoViewModel(photo));
+                }
+                PhotoCountStatus.Text = $"{_photos.Count} fotos con tag: {tagName}";
+                StatusText.Text = $"Mostrando {_photos.Count} fotos con tag: {tagName}";
+            });
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Error: {ex.Message}";
+        }
+    }
+
+    private async void SemanticSearchBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var query = SearchBox.Text.Trim();
+
+        if (string.IsNullOrEmpty(query))
+        {
+            StatusText.Text = "Escribe algo para buscar semánticamente...";
             return;
         }
 
-        var result = MessageBox.Show("¿Reprocesar tags para TODAS las fotos existentes?\n\nEsto puede tomar varios minutos.",
-                                      "Confirmar", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (_semanticSearchService == null)
+        {
+            StatusText.Text = "Servicio de búsqueda semántica no disponible";
+            return;
+        }
+
+        StatusText.Text = $"🧠 Buscando semánticamente: '{query}'...";
+        ProgressBar.IsIndeterminate = true;
+        SemanticSearchBtn.IsEnabled = false;
+
+        try
+        {
+            var results = await _semanticSearchService.SearchAsync(query, limit: 200);
+
+            Dispatcher.Invoke(() =>
+            {
+                _photos.Clear();
+                foreach (var photo in results)
+                {
+                    _photos.Add(new PhotoViewModel(photo));
+                }
+
+                _isSemanticSearch = true;
+                SearchModeIndicator.Visibility = Visibility.Visible;
+                SearchModeText.Text = $"Búsqueda semántica: '{query}' - {_photos.Count} resultados";
+                PhotoCountStatus.Text = $"{_photos.Count} resultados semánticos";
+                StatusText.Text = $"🧠 Búsqueda semántica completada: {_photos.Count} resultados";
+            });
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Error: {ex.Message}";
+            MessageBox.Show($"Error en búsqueda semántica: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            ProgressBar.IsIndeterminate = false;
+            SemanticSearchBtn.IsEnabled = true;
+        }
+    }
+
+    private void ClearSearchBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _isSemanticSearch = false;
+        SearchModeIndicator.Visibility = Visibility.Collapsed;
+        SearchBox.Text = "";
+        _ = LoadPhotosAsync();
+        StatusText.Text = "Búsqueda semántica cancelada";
+    }
+
+    private void SearchBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            SemanticSearchBtn_Click(sender, e);
+        }
+    }
+
+    private void PresentationBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_photos.Count == 0)
+        {
+            MessageBox.Show("No hay fotos para mostrar", "Modo Presentación", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var imagePaths = _photos.Select(p => p.ThumbnailPath).Where(p => !string.IsNullOrEmpty(p)).ToList();
+        var presentationWindow = new PresentationWindow(imagePaths!);
+        presentationWindow.Owner = this;
+        presentationWindow.ShowDialog();
+    }
+
+    // Botón: Reprocesar Tags
+    private async void ReprocessTagsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var result = MessageBox.Show("¿Reprocesar tags automáticos para TODAS las fotos?",
+                                      "Reprocesar Tags", MessageBoxButton.YesNo, MessageBoxImage.Question);
 
         if (result != MessageBoxResult.Yes) return;
 
-        ReprocessTagsBtn.IsEnabled = false;
         StatusText.Text = "Reprocesando tags...";
         ProgressBar.IsIndeterminate = true;
+        ReprocessTagsBtn.IsEnabled = false;
 
         try
         {
             var allPhotos = await _photoRepository.GetPhotosAsync(limit: 10000);
-            var connectionFactory = new Infrastructure.Database.SqliteConnectionFactory(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Woola", "woola.db"));
-            var autoTaggingService = new AutoTaggingService(_tagRepository, connectionFactory);
-
             var processed = 0;
             var total = allPhotos.Count();
+
+            var connectionFactory = new SqliteConnectionFactory(
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Woola", "woola.db"));
+            var autoTaggingService = new AutoTaggingService(_tagRepository, connectionFactory);
 
             foreach (var photo in allPhotos)
             {
                 await autoTaggingService.UpdateTagsForExistingPhotoAsync(photo.Id, photo);
                 processed++;
 
-                if (processed % 100 == 0)
+                if (processed % 50 == 0)
                 {
                     StatusText.Text = $"Reprocesando tags: {processed}/{total} fotos";
+                    await Task.Delay(10);
                 }
             }
 
@@ -529,23 +423,21 @@ public partial class MainWindow : Window
             MessageBox.Show($"Tags reprocesados correctamente para {processed} fotos.",
                             "Completado", MessageBoxButton.OK, MessageBoxImage.Information);
 
-            // Recargar tags
             LoadTags();
         }
         catch (Exception ex)
         {
             StatusText.Text = $"Error: {ex.Message}";
-            MessageBox.Show($"Error al reprocesar tags: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
-            ReprocessTagsBtn.IsEnabled = true;
             ProgressBar.IsIndeterminate = false;
+            ReprocessTagsBtn.IsEnabled = true;
         }
-
-
     }
 
+    // Botón: Probar VisionAgent
     private void TestVisionBtn_Click(object sender, RoutedEventArgs e)
     {
         var testWindow = new TestVisionWindow();
@@ -553,7 +445,7 @@ public partial class MainWindow : Window
         testWindow.ShowDialog();
     }
 
-
+    // Botón: Probar OCR Agent
     private void TestOcrBtn_Click(object sender, RoutedEventArgs e)
     {
         var testWindow = new TestOcrWindow();
@@ -561,6 +453,7 @@ public partial class MainWindow : Window
         testWindow.ShowDialog();
     }
 
+    // Botón: Gestionar Rostros
     private void FaceManagementBtn_Click(object sender, RoutedEventArgs e)
     {
         var faceWindow = new FaceManagementWindow();
@@ -569,3 +462,17 @@ public partial class MainWindow : Window
     }
 }
 
+public class PhotoViewModel
+{
+    private readonly Photo _photo;
+
+    public PhotoViewModel(Photo photo)
+    {
+        _photo = photo;
+    }
+
+    public string ThumbnailPath => _photo.ThumbnailPath ?? "";
+    public string FileName => _photo.FileName;
+    public DateTime? DateTaken => _photo.DateTaken;
+    public string CameraModel => _photo.CameraModel ?? "📷 Cámara desconocida";
+}

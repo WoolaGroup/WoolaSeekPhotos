@@ -20,15 +20,8 @@ public class PhotoRepository
         using var connection = _connectionFactory.CreateConnection();
 
         const string sql = @"
-            INSERT INTO Photos (
-                Path, Hash, FileSize, DateTaken, Width, Height,
-                Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation,
-                Status, ThumbnailPath, CreatedAt, LastIndexedAt
-            ) VALUES (
-                @Path, @Hash, @FileSize, @DateTaken, @Width, @Height,
-                @Latitude, @Longitude, @CameraModel, @LensModel, @Aperture, @ShutterSpeed, @Iso, @FocalLength, @Orientation,
-                @Status, @ThumbnailPath, @CreatedAt, @LastIndexedAt
-            );
+            INSERT INTO Photos (Path, Hash, FileSize, DateTaken, Width, Height, Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation, Status, ThumbnailPath, CreatedAt, LastIndexedAt)
+            VALUES (@Path, @Hash, @FileSize, @DateTaken, @Width, @Height, @Latitude, @Longitude, @CameraModel, @LensModel, @Aperture, @ShutterSpeed, @Iso, @FocalLength, @Orientation, @Status, @ThumbnailPath, @CreatedAt, @LastIndexedAt);
             SELECT last_insert_rowid();
         ";
 
@@ -56,23 +49,45 @@ public class PhotoRepository
         });
     }
 
-
     public async Task<IEnumerable<Photo>> GetPhotosAsync(int limit = 1000, int offset = 0)
     {
         using var connection = _connectionFactory.CreateConnection();
 
         const string sql = @"
-        SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height,
-               Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation,
-               Status, ThumbnailPath, CreatedAt, LastIndexedAt
-        FROM Photos
-        ORDER BY COALESCE(DateTaken, CreatedAt) DESC
-        LIMIT @Limit OFFSET @Offset
-    ";
+            SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height,
+                   Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation,
+                   Status, ThumbnailPath, CreatedAt, LastIndexedAt
+            FROM Photos
+            ORDER BY Id DESC
+            LIMIT @Limit OFFSET @Offset
+        ";
 
         var photos = await connection.QueryAsync<Photo>(sql, new { Limit = limit, Offset = offset });
 
+        foreach (var photo in photos)
+        {
+            if (photo.DateTaken.HasValue)
+            {
+                // Conversión si es necesario
+            }
+        }
+
         return photos;
+    }
+
+    public async Task<Photo?> GetPhotoByIdAsync(int id)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+
+        const string sql = @"
+            SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height,
+                   Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation,
+                   Status, ThumbnailPath, CreatedAt, LastIndexedAt
+            FROM Photos
+            WHERE Id = @Id
+        ";
+
+        return await connection.QueryFirstOrDefaultAsync<Photo>(sql, new { Id = id });
     }
 
     public async Task<int> GetTotalCountAsync()
@@ -81,43 +96,20 @@ public class PhotoRepository
         return await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Photos");
     }
 
-    public async Task<Photo?> GetPhotoByIdAsync(int id)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-
-        const string sql = @"
-        SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height,
-               Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation,
-               Status, ThumbnailPath, CreatedAt, LastIndexedAt
-        FROM Photos
-        WHERE Id = @Id
-    ";
-
-        var photo = await connection.QueryFirstOrDefaultAsync<Photo>(sql, new { Id = id });
-
-        if (photo?.DateTaken != null && photo.DateTaken.HasValue)
-        {
-            // Ya está en el formato correcto
-        }
-
-        return photo;
-    }
-    
- 
     public async Task<IEnumerable<Photo>> SearchPhotosAsync(string searchTerm, int limit = 100)
     {
         using var connection = _connectionFactory.CreateConnection();
 
         const string sql = @"
-        SELECT p.Id, p.Path, p.Hash, p.FileSize, p.DateTaken, p.Width, p.Height,
-               p.Latitude, p.Longitude, p.CameraModel, p.LensModel, p.Aperture, p.ShutterSpeed, p.Iso, p.FocalLength, p.Orientation,
-               p.Status, p.ThumbnailPath
-        FROM Photos_FTS fts
-        JOIN Photos p ON p.Id = fts.rowid
-        WHERE Photos_FTS MATCH @SearchTerm
-        ORDER BY COALESCE(p.DateTaken, p.CreatedAt) DESC
-        LIMIT @Limit
-    ";
+            SELECT p.Id, p.Path, p.Hash, p.FileSize, p.DateTaken, p.Width, p.Height,
+                   p.Latitude, p.Longitude, p.CameraModel, p.LensModel, p.Aperture, p.ShutterSpeed, p.Iso, p.FocalLength, p.Orientation,
+                   p.Status, p.ThumbnailPath
+            FROM Photos_FTS fts
+            JOIN Photos p ON p.Id = fts.rowid
+            WHERE Photos_FTS MATCH @SearchTerm
+            ORDER BY COALESCE(p.DateTaken, p.CreatedAt) DESC
+            LIMIT @Limit
+        ";
 
         return await connection.QueryAsync<Photo>(sql, new { SearchTerm = searchTerm, Limit = limit });
     }

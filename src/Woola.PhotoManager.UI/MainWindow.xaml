@@ -91,12 +91,6 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
-
-        <!-- ScrollBar personalizado -->
-        <Style TargetType="ScrollBar">
-            <Setter Property="Width" Value="8"/>
-            <Setter Property="Background" Value="Transparent"/>
-        </Style>
     </Window.Resources>
 
     <Grid>
@@ -126,14 +120,13 @@
                     </Button>
 
                     <Button x:Name="ReprocessTagsBtn" Click="ReprocessTagsBtn_Click" 
-        Style="{StaticResource SecondaryButton}" Margin="0,5">
+                            Style="{StaticResource SecondaryButton}" Margin="0,5">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🏷️" FontSize="16" Margin="0,0,10,0"/>
                             <TextBlock Text="Reprocesar Tags"/>
                         </StackPanel>
                     </Button>
 
-                    
                     <Button x:Name="StopBtn" Click="StopBtn_Click" IsEnabled="False" 
                             Style="{StaticResource SecondaryButton}" Margin="0,5">
                         <StackPanel Orientation="Horizontal">
@@ -151,7 +144,7 @@
                     </Button>
 
                     <Button x:Name="TestVisionBtn" Click="TestVisionBtn_Click" 
-        Style="{StaticResource SecondaryButton}" Margin="0,5">
+                            Style="{StaticResource SecondaryButton}" Margin="0,5">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="👁️" FontSize="16" Margin="0,0,10,0"/>
                             <TextBlock Text="Probar VisionAgent"/>
@@ -159,7 +152,7 @@
                     </Button>
 
                     <Button x:Name="TestOcrBtn" Click="TestOcrBtn_Click" 
-        Style="{StaticResource SecondaryButton}" Margin="0,5">
+                            Style="{StaticResource SecondaryButton}" Margin="0,5">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="📝" FontSize="16" Margin="0,0,10,0"/>
                             <TextBlock Text="Probar OCR Agent"/>
@@ -167,47 +160,16 @@
                     </Button>
 
                     <Button x:Name="FaceManagementBtn" Click="FaceManagementBtn_Click" 
-        Style="{StaticResource SecondaryButton}" Margin="0,5">
+                            Style="{StaticResource SecondaryButton}" Margin="0,5">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="👤" FontSize="16" Margin="0,0,10,0"/>
                             <TextBlock Text="Gestionar Rostros"/>
                         </StackPanel>
                     </Button>
-                    <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
-
-                    <!-- Estadísticas -->
-                    <TextBlock Text="ESTADÍSTICAS" FontSize="11" 
-                               Foreground="{StaticResource TextMuted}" 
-                               Margin="0,0,0,10"/>
 
                     <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
 
-                    <!-- Tags populares -->
-                    <TextBlock Text="TAGS POPULARES" FontSize="11" 
-           Foreground="{StaticResource TextMuted}" 
-           Margin="0,0,0,10"/>
-
-                    <ItemsControl x:Name="TagsList" Margin="0,0,0,10">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Content="{Binding Name}" 
-                    Style="{StaticResource SecondaryButton}"
-                    Margin="0,0,8,8"
-                    Padding="10,5"
-                    FontSize="11"
-                    Click="TagButton_Click"
-                    CommandParameter="{Binding Name}"/>
-                                <!-- ← Usar CommandParameter -->
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-
+                    <!-- Total Fotos -->
                     <Border Background="{StaticResource CardBg}" CornerRadius="8" Padding="12" Margin="0,5">
                         <StackPanel>
                             <TextBlock Text="📸 Total Fotos" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
@@ -218,17 +180,44 @@
 
                     <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
 
+                    <!-- Tags populares -->
+                    <TextBlock Text="TAGS POPULARES" FontSize="11" 
+                               Foreground="{StaticResource TextMuted}" 
+                               Margin="0,0,0,10"/>
+
+                    <ItemsControl x:Name="TagsList" Margin="0,0,0,10">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Content="{Binding Name}" 
+                                        Style="{StaticResource SecondaryButton}"
+                                        Margin="0,0,8,8"
+                                        Padding="10,5"
+                                        FontSize="11"
+                                        Click="TagButton_Click"
+                                        CommandParameter="{Binding Name}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
+
                     <!-- Filtros rápidos -->
                     <TextBlock Text="FILTROS RÁPIDOS" FontSize="11" 
                                Foreground="{StaticResource TextMuted}" 
                                Margin="0,0,0,10"/>
 
                     <Button x:Name="FilterAllBtn" Content="📷 Todas las fotos" 
-                        Style="{StaticResource SecondaryButton}" Margin="0,5"
-                        Click="FilterAllBtn_Click"/>
+                            Style="{StaticResource SecondaryButton}" Margin="0,5"
+                            Click="FilterAllBtn_Click"/>
 
                     <Button x:Name="FilterRecentBtn" Content="🕐 Últimos 30 días" 
-                            Style="{StaticResource SecondaryButton}" Margin="0,5"/>
+                            Style="{StaticResource SecondaryButton}" Margin="0,5"
+                            Click="FilterRecentBtn_Click"/>
 
                     <!-- Carpeta seleccionada -->
                     <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
@@ -247,44 +236,76 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- Barra de búsqueda -->
+            <!-- Barra de búsqueda con botón semántico -->
             <Border Grid.Row="0" Background="{StaticResource DarkBg}" Padding="20,15">
-                <TextBox x:Name="SearchBox" 
-                         FontSize="14" 
-                         Padding="15,12"
-                         Background="{StaticResource CardBg}"
-                         Foreground="{StaticResource TextPrimary}"
-                         BorderThickness="0"
-                         CaretBrush="{StaticResource PrimaryColor}"
-                         TextChanged="SearchBox_TextChanged">
-                    <TextBox.Resources>
-                        <VisualBrush x:Key="Hint" TileMode="None" Stretch="None" AlignmentX="Left">
-                            <VisualBrush.Visual>
-                                <TextBlock Text="🔍 Buscar fotos por nombre, fecha o etiqueta..." 
-                                           Foreground="{StaticResource TextMuted}" 
-                                           FontSize="14" VerticalAlignment="Center"/>
-                            </VisualBrush.Visual>
-                        </VisualBrush>
-                    </TextBox.Resources>
-                    <TextBox.Style>
-                        <Style TargetType="TextBox">
-                            <Setter Property="Background" Value="{StaticResource CardBg}"/>
-                            <Style.Triggers>
-                                <Trigger Property="Text" Value="">
-                                    <Setter Property="Background" Value="{StaticResource Hint}"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBox.Style>
-                </TextBox>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox x:Name="SearchBox" 
+                             FontSize="14" 
+                             Padding="15,12"
+                             Background="{StaticResource CardBg}"
+                             Foreground="{StaticResource TextPrimary}"
+                             BorderThickness="0"
+                             CaretBrush="{StaticResource PrimaryColor}"
+                             KeyDown="SearchBox_KeyDown">
+                        <TextBox.Resources>
+                            <VisualBrush x:Key="Hint" TileMode="None" Stretch="None" AlignmentX="Left">
+                                <VisualBrush.Visual>
+                                    <TextBlock Text="🔍 Buscar por nombre, fecha, etiqueta... o prueba búsqueda semántica" 
+                                               Foreground="{StaticResource TextMuted}" 
+                                               FontSize="13" VerticalAlignment="Center"/>
+                                </VisualBrush.Visual>
+                            </VisualBrush>
+                        </TextBox.Resources>
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Setter Property="Background" Value="{StaticResource CardBg}"/>
+                                <Style.Triggers>
+                                    <Trigger Property="Text" Value="">
+                                        <Setter Property="Background" Value="{StaticResource Hint}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+
+                    <Button Grid.Column="1" x:Name="SemanticSearchBtn" 
+                            Content="🧠 Búsqueda Semántica" 
+                            Background="{StaticResource PrimaryColor}"
+                            Foreground="White"
+                            Padding="15,12"
+                            Margin="10,0,0,0"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            FontWeight="SemiBold"
+                            Click="SemanticSearchBtn_Click"
+                            ToolTip="Buscar por significado (ej: 'vehículos', 'documentos', 'personas')"/>
+                </Grid>
+            </Border>
+
+            <!-- Indicador de modo de búsqueda semántica -->
+            <Border x:Name="SearchModeIndicator" Grid.Row="1" 
+                    Background="#0078D4" Padding="8,4" CornerRadius="4" 
+                    Margin="20,0,20,10" HorizontalAlignment="Left" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🧠" Foreground="White" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="SearchModeText" Text="Búsqueda semántica" Foreground="White" FontSize="11"/>
+                    <Button x:Name="ClearSearchBtn" Content="✖" Background="Transparent" BorderThickness="0" 
+                            Foreground="White" Margin="10,0,0,0" Cursor="Hand" Click="ClearSearchBtn_Click"/>
+                </StackPanel>
             </Border>
 
             <!-- Barra de progreso -->
-            <Border Grid.Row="1" Background="{StaticResource DarkBg}" Padding="20,0,20,15">
+            <Border Grid.Row="2" Background="{StaticResource DarkBg}" Padding="20,0,20,15">
                 <StackPanel>
                     <TextBlock x:Name="ProgressText" Text="Listo" 
                                FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
@@ -296,7 +317,7 @@
             </Border>
 
             <!-- Grid de fotos -->
-            <ScrollViewer Grid.Row="2" 
+            <ScrollViewer Grid.Row="3" 
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="PhotoGrid"
@@ -310,14 +331,11 @@
                         <DataTemplate>
                             <Border Style="{StaticResource PhotoCard}" Width="220">
                                 <StackPanel>
-                                    <!-- Imagen -->
                                     <Border Height="180" CornerRadius="8,8,0,0" Background="#1A1A1A">
                                         <Image Source="{Binding ThumbnailPath}" 
                                                Stretch="Uniform"
                                                VerticalAlignment="Center"/>
                                     </Border>
-
-                                    <!-- Información -->
                                     <StackPanel Margin="12,10,12,12">
                                         <TextBlock Text="{Binding FileName}" 
                                                    FontSize="12" 
@@ -341,7 +359,7 @@
             </ScrollViewer>
 
             <!-- Barra de estado -->
-            <Border Grid.Row="3" Background="{StaticResource PanelBg}" 
+            <Border Grid.Row="4" Background="{StaticResource PanelBg}" 
                     BorderBrush="{StaticResource BorderColor}" BorderThickness="0,1,0,0"
                     Padding="20,10">
                 <StackPanel Orientation="Horizontal">
@@ -353,4 +371,4 @@
             </Border>
         </Grid>
     </Grid>
-</Window>
+</Window>   
