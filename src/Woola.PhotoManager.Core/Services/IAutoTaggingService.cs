@@ -8,4 +8,5 @@ public interface IAutoTaggingService
 {
     Task<List<string>> GenerateTagsForPhotoAsync(Photo photo);
     Task ApplyTagsToPhotoAsync(int photoId, List<string> tags);
+    Task UpdateTagsForExistingPhotoAsync(int photoId, Photo photo);
 }
