@@ -121,15 +121,17 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <Button Content="🧪 Probar una imagen" Style="{StaticResource SecondaryButton}" 
-        Margin="10,0,0,0" Click="TestSingleImage_Click"/>
-
         <!-- Barra de estado -->
         <Border Grid.Row="2" Background="#252525" CornerRadius="8" Padding="15" Margin="0,15,0,0">
             <StackPanel Orientation="Horizontal">
-                <TextBlock x:Name="StatusText" Text="Listo" Foreground="#888888" FontSize="12"/>
-                <Button Content="🔄 Reprocesar Rostros" Style="{StaticResource SecondaryButton}" 
+                <TextBlock x:Name="StatusText" Text="Listo" Foreground="#888888" FontSize="12"
+                           VerticalAlignment="Center"/>
+                <Button Content="🔄 Reprocesar Rostros" Style="{StaticResource SecondaryButton}"
                         Margin="20,0,0,0" Click="ReprocessFaces_Click"/>
+                <Button Content="🔗 Agrupar por Similitud" Style="{StaticResource SecondaryButton}"
+                        Margin="10,0,0,0" Click="ClusterAndSave_Click"/>
+                <Button Content="🧪 Probar imagen" Style="{StaticResource SecondaryButton}"
+                        Margin="10,0,0,0" Click="TestSingleImage_Click"/>
             </StackPanel>
         </Border>
     </Grid>

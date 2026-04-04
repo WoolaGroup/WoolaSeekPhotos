@@ -65,36 +65,32 @@ public partial class FaceManagementWindow : Window
 
         try
         {
-            var allFaces = await _faceRepository.GetAllFacesAsync();
-
-            // Limpiar grupos existentes
+            var allFaces = (await _faceRepository.GetAllFacesAsync()).ToList();
             _personGroups.Clear();
 
-            // Cada rostro es su propio grupo (sin agrupar por similitud)
-            foreach (var face in allFaces)
+            // Group faces by PersonId; faces without PersonId are solo groups
+            var grouped = allFaces
+                .GroupBy(f => f.PersonId ?? $"_solo_{f.Id}")
+                .OrderByDescending(g => g.Count());
+
+            foreach (var g in grouped)
             {
-                // Si ya tiene nombre asignado, usar ese nombre
-                string displayName;
-                if (!string.IsNullOrEmpty(face.PersonName))
-                {
-                    displayName = face.PersonName;
-                }
-                else
-                {
-                    displayName = "👤 Persona sin identificar";
-                }
+                var faceList = g.ToList();
+                var displayName = faceList.FirstOrDefault(f => !string.IsNullOrEmpty(f.PersonName))?.PersonName
+                                  ?? "👤 Persona sin identificar";
 
                 var personGroup = new PersonGroup
                 {
-                    Id = face.Id.ToString(),
-                    Faces = new List<Face> { face },
+                    Id = g.Key,
+                    Faces = faceList,
                     DisplayName = displayName,
-                    FaceThumbnails = await GetFaceThumbnails(new List<Face> { face })
+                    FaceThumbnails = await GetFaceThumbnails(faceList)
                 };
                 _personGroups.Add(personGroup);
             }
 
-            if (statusText != null) statusText.Text = $"{allFaces.Count()} rostros encontrados";
+            if (statusText != null)
+                statusText.Text = $"{_personGroups.Count} personas, {allFaces.Count} rostros";
         }
         catch (Exception ex)
         {
@@ -128,29 +124,32 @@ public partial class FaceManagementWindow : Window
 
         if (group == null || group.Faces.Count == 0) return;
 
-        var face = group.Faces.First(); // Cada grupo tiene un solo rostro
-
+        var firstFace = group.Faces.First();
         var dialog = new InputDialog("Asignar nombre a la persona", "Nombre:",
-                                      face.PersonName ?? "");
+                                      firstFace.PersonName ?? "");
 
         if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.Answer))
         {
             var newName = dialog.Answer.Trim();
-            var personId = Guid.NewGuid().ToString();
+            // Reuse existing PersonId if any face in the group already has one
+            var personId = group.Faces.FirstOrDefault(f => !string.IsNullOrEmpty(f.PersonId))?.PersonId
+                           ?? Guid.NewGuid().ToString();
 
-            // Actualizar el rostro
-            await _faceRepository.UpdatePersonNameAsync(face.Id, newName, personId);
-
-            // Actualizar tag en la foto
             var tagName = $"persona_{newName.ToLower().Replace(" ", "_")}";
             var tagId = await _tagRepository.GetOrCreateTagAsync(tagName, "Person", true);
-            await _tagRepository.AddTagToPhotoAsync(face.PhotoId, tagId, face.Confidence, "FaceAgent");
 
-            // Recargar grupos
+            // Update ALL faces in the group
+            foreach (var face in group.Faces)
+            {
+                await _faceRepository.UpdatePersonNameAsync(face.Id, newName, personId);
+                await _tagRepository.AddTagToPhotoAsync(face.PhotoId, tagId, face.Confidence, "FaceAgent");
+            }
+
             LoadGroups();
 
             var statusText = FindName("StatusText") as System.Windows.Controls.TextBlock;
-            if (statusText != null) statusText.Text = $"Nombre '{newName}' asignado al rostro";
+            if (statusText != null)
+                statusText.Text = $"'{newName}' asignado a {group.Faces.Count} rostros";
         }
     }
 
@@ -205,7 +204,6 @@ public partial class FaceManagementWindow : Window
 
         try
         {
-            // Eliminar todos los rostros existentes
             await _faceRepository.DeleteAllFacesAsync();
 
             var allPhotos = await _photoRepository.GetPhotosAsync(limit: 10000);
@@ -213,15 +211,19 @@ public partial class FaceManagementWindow : Window
             var processed = 0;
             var totalFaces = 0;
 
-            var faceService = new FaceService();
+            using var faceService = new FaceService();
 
             foreach (var photo in allPhotos)
             {
-                var faces = await faceService.DetectFacesAsync(photo.Path);
+                if (!System.IO.File.Exists(photo.Path)) { processed++; continue; }
 
-                foreach (var detectedFace in faces)
+                var detectedFaces = await faceService.DetectFacesAsync(photo.Path);
+
+                foreach (var detectedFace in detectedFaces)
                 {
-                    // Guardar cada rostro individualmente (sin agrupar)
+                    var embedding = await faceService.GenerateEmbeddingAsync(photo.Path, detectedFace);
+                    var hasEmbedding = embedding.Any(v => v != 0f);
+
                     var face = new Face
                     {
                         PhotoId = photo.Id,
@@ -231,6 +233,7 @@ public partial class FaceManagementWindow : Window
                         Y = detectedFace.Y,
                         Width = detectedFace.Width,
                         Height = detectedFace.Height,
+                        Encoding = hasEmbedding ? SerializeEmbedding(embedding) : null,
                         Confidence = detectedFace.Confidence,
                         IsUserConfirmed = false,
                         CreatedAt = DateTime.UtcNow
@@ -243,13 +246,13 @@ public partial class FaceManagementWindow : Window
                 processed++;
                 if (processed % 10 == 0 && statusText != null)
                 {
-                    statusText.Text = $"Procesando: {processed}/{total} fotos - Rostros encontrados: {totalFaces}";
+                    statusText.Text = $"Procesando: {processed}/{total} fotos – {totalFaces} rostros";
+                    await Task.Delay(1);
                 }
             }
 
-            if (statusText != null) statusText.Text = $"Completado: {totalFaces} rostros encontrados en {total} fotos";
-
-            // Recargar grupos
+            if (statusText != null)
+                statusText.Text = $"Completado: {totalFaces} rostros en {total} fotos";
             LoadGroups();
         }
         catch (Exception ex)
@@ -262,6 +265,99 @@ public partial class FaceManagementWindow : Window
         {
             if (reprocessBtn != null) reprocessBtn.IsEnabled = true;
         }
+    }
+
+    private async void ClusterAndSave_Click(object sender, RoutedEventArgs e)
+    {
+        var statusText = FindName("StatusText") as System.Windows.Controls.TextBlock;
+        var clusterBtn = sender as System.Windows.Controls.Button;
+
+        if (statusText != null) statusText.Text = "Cargando embeddings...";
+        if (clusterBtn != null) clusterBtn.IsEnabled = false;
+
+        try
+        {
+            var facesWithEncoding = (await _faceRepository.GetFacesWithEncodingAsync()).ToList();
+
+            if (facesWithEncoding.Count == 0)
+            {
+                MessageBox.Show("No hay rostros con embeddings. Primero usa 'Reprocesar Rostros'.",
+                                "Sin datos", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var faceTuples = facesWithEncoding
+                .Select(f => (face: f, emb: DeserializeEmbedding(f.Encoding!)))
+                .Where(t => t.emb.Any(v => v != 0f))
+                .ToList();
+
+            if (statusText != null)
+                statusText.Text = $"Agrupando {faceTuples.Count} rostros...";
+
+            var clusters = ClusterFacesByEmbedding(
+                faceTuples.Select(t => t.emb).ToList(),
+                faceTuples.Select(t => t.face).ToList());
+
+            var updated = 0;
+            foreach (var cluster in clusters)
+            {
+                var existingPersonId = cluster.FirstOrDefault(f => !string.IsNullOrEmpty(f.PersonId))?.PersonId
+                                       ?? Guid.NewGuid().ToString();
+                foreach (var face in cluster)
+                {
+                    if (face.PersonId != existingPersonId)
+                    {
+                        await _faceRepository.UpdatePersonIdAsync(face.Id, existingPersonId);
+                        updated++;
+                    }
+                }
+            }
+
+            if (statusText != null)
+                statusText.Text = $"Agrupados: {clusters.Count} grupos de {faceTuples.Count} rostros ({updated} actualizados)";
+            LoadGroups();
+        }
+        catch (Exception ex)
+        {
+            var statusText2 = FindName("StatusText") as System.Windows.Controls.TextBlock;
+            if (statusText2 != null) statusText2.Text = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            if (clusterBtn != null) clusterBtn.IsEnabled = true;
+        }
+    }
+
+    private List<List<Face>> ClusterFacesByEmbedding(List<float[]> embeddings, List<Face> faces)
+    {
+        var groups = new List<List<Face>>();
+        var used = new bool[faces.Count];
+
+        for (int i = 0; i < faces.Count; i++)
+        {
+            if (used[i]) continue;
+            var group = new List<Face> { faces[i] };
+            used[i] = true;
+
+            for (int j = i + 1; j < faces.Count; j++)
+            {
+                if (used[j]) continue;
+                if (CosineSimilarity(embeddings[i], embeddings[j]) > 0.6f)
+                {
+                    group.Add(faces[j]);
+                    used[j] = true;
+                }
+            }
+            groups.Add(group);
+        }
+        return groups;
+    }
+
+    private float[] DeserializeEmbedding(byte[] bytes)
+    {
+        var floats = new float[bytes.Length / 4];
+        Buffer.BlockCopy(bytes, 0, floats, 0, bytes.Length);
+        return floats;
     }
 
     private List<List<(Photo photo, DetectedFace detectedFace, float[] embedding)>> ClusterFaces(

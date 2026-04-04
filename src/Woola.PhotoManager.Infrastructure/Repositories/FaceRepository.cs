@@ -86,4 +86,22 @@ public class FaceRepository
         const string sql = "DELETE FROM Faces";
         await connection.ExecuteAsync(sql);
     }
+
+    public async Task UpdatePersonIdAsync(int faceId, string personId)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        const string sql = "UPDATE Faces SET PersonId = @PersonId WHERE Id = @Id";
+        await connection.ExecuteAsync(sql, new { Id = faceId, PersonId = personId });
+    }
+
+    public async Task<IEnumerable<Face>> GetFacesWithEncodingAsync()
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        const string sql = @"
+            SELECT Id, PhotoId, PersonName, PersonId, X, Y, Width, Height,
+                   Encoding, Confidence, IsUserConfirmed, CreatedAt
+            FROM Faces WHERE Encoding IS NOT NULL
+            ORDER BY CreatedAt DESC";
+        return await connection.QueryAsync<Face>(sql);
+    }
 }
