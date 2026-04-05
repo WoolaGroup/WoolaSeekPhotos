@@ -1,4 +1,6 @@
-﻿using Woola.PhotoManager.Common.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Woola.PhotoManager.Common.Services;
 using Woola.PhotoManager.Domain.Entities;
 using Woola.PhotoManager.Infrastructure.Repositories;
 
@@ -6,20 +8,24 @@ namespace Woola.PhotoManager.Core.Agents.Agents;
 
 public class FaceAgent : IAgent
 {
-    private readonly IFaceService _faceService;
-    private readonly FaceRepository _faceRepository;
-    private readonly TagRepository _tagRepository;
+    private readonly IFaceService       _faceService;
+    private readonly FaceRepository     _faceRepository;
+    private readonly TagRepository      _tagRepository;
+    private readonly ILogger<FaceAgent> _logger;
 
-    public string Name => "FaceAgent";
+    public string Name        => "FaceAgent";
     public string Description => "Detecta y reconoce rostros en imágenes";
-    public int Priority => 5;
-    public bool IsEnabled { get; set; } = true;
+    public int    Priority    => 5;
+    public bool   IsEnabled   { get; set; } = true;
 
-    public FaceAgent(IFaceService faceService, FaceRepository faceRepository, TagRepository tagRepository)
+    public FaceAgent(IFaceService faceService, FaceRepository faceRepository,
+                     TagRepository tagRepository,
+                     ILogger<FaceAgent>? logger = null)
     {
-        _faceService = faceService;
+        _faceService    = faceService;
         _faceRepository = faceRepository;
-        _tagRepository = tagRepository;
+        _tagRepository  = tagRepository;
+        _logger         = logger ?? NullLogger<FaceAgent>.Instance;
     }
 
     public bool CanProcess(Photo photo)
@@ -29,12 +35,10 @@ public class FaceAgent : IAgent
         return extensions.Contains(ext) && File.Exists(photo.Path);
     }
 
-
-
     public async Task<AgentResult> ExecuteAsync(Photo photo, CancellationToken cancellationToken = default)
     {
         var startTime = DateTime.Now;
-        var result = new AgentResult { AgentName = Name, Success = true };
+        var result    = new AgentResult { AgentName = Name, Success = true };
 
         try
         {
@@ -58,20 +62,22 @@ public class FaceAgent : IAgent
                 {
                     embedding = await _faceService.GenerateEmbeddingAsync(photo.Path, detected);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Si el embedding falla, guardamos igualmente el bounding box
+                    _logger.LogDebug("[FaceAgent] Embedding falló para foto {PhotoId}: {Msg}",
+                        photo.Id, ex.Message);
+                    // guardamos igualmente el bounding box sin embedding
                 }
 
                 await _faceRepository.InsertFaceAsync(new Face
                 {
-                    PhotoId = photo.Id,
-                    X = detected.X,
-                    Y = detected.Y,
-                    Width = detected.Width,
-                    Height = detected.Height,
-                    Confidence = detected.Confidence,
-                    Encoding = embedding != null ? SerializeEmbedding(embedding) : null,
+                    PhotoId         = photo.Id,
+                    X               = detected.X,
+                    Y               = detected.Y,
+                    Width           = detected.Width,
+                    Height          = detected.Height,
+                    Confidence      = detected.Confidence,
+                    Encoding        = embedding != null ? SerializeEmbedding(embedding) : null,
                     IsUserConfirmed = false
                 });
             }
@@ -79,29 +85,31 @@ public class FaceAgent : IAgent
             // Tags de presencia y cantidad de rostros
             result.Tags.Add(new AgentTag
             {
-                Name = "con_rostros",
-                Category = "Feature",
+                Name       = "con_rostros",
+                Category   = "Feature",
                 Confidence = 1.0,
-                Source = Name
+                Source     = Name
             });
 
             if (faces.Count >= 2)
             {
                 result.Tags.Add(new AgentTag
                 {
-                    Name = $"rostros_{faces.Count}",
-                    Category = "Feature",
+                    Name       = $"rostros_{faces.Count}",
+                    Category   = "Feature",
                     Confidence = 1.0,
-                    Source = Name
+                    Source     = Name
                 });
             }
 
             result.ProcessingTimeMs = (DateTime.Now - startTime).TotalMilliseconds;
+            _logger.LogDebug("[FaceAgent] {Faces} rostros en foto {PhotoId} ({Ms:F0}ms)",
+                faces.Count, photo.Id, result.ProcessingTimeMs);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[FaceAgent] Error: {ex.Message}");
-            result.Success = false;
+            _logger.LogWarning("[FaceAgent] Error en foto {PhotoId}: {Msg}", photo.Id, ex.Message);
+            result.Success      = false;
             result.ErrorMessage = ex.Message;
         }
 

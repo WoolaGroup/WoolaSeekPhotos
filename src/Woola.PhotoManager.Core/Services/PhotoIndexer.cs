@@ -1,4 +1,5 @@
-﻿using Woola.PhotoManager.Common.Services;
+using Microsoft.Extensions.Logging;
+using Woola.PhotoManager.Common.Services;
 using Woola.PhotoManager.Core.Agents;
 using Woola.PhotoManager.Domain.Entities;
 using Woola.PhotoManager.Infrastructure.Repositories;
@@ -7,26 +8,30 @@ namespace Woola.PhotoManager.Core.Services;
 
 public class PhotoIndexer : IPhotoIndexer
 {
-    private readonly PhotoRepository _photoRepository;
-    private readonly TagRepository _tagRepository;
-    private readonly IThumbnailService _thumbnailService;
-    private readonly IMetadataService _metadataService;
+    private readonly PhotoRepository        _photoRepository;
+    private readonly TagRepository          _tagRepository;
+    private readonly IThumbnailService      _thumbnailService;
+    private readonly IMetadataService       _metadataService;
+    private readonly IAgentOrchestrator     _agentOrchestrator;
+    private readonly ILogger<PhotoIndexer>  _logger;
+
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isRunning;
-    private readonly IAgentOrchestrator _agentOrchestrator;
 
     public PhotoIndexer(
-     PhotoRepository photoRepository,
-     TagRepository tagRepository,
-     IThumbnailService thumbnailService,
-     IMetadataService metadataService,
-     IAgentOrchestrator agentOrchestrator)  // ← Nuevo parámetro
+        PhotoRepository        photoRepository,
+        TagRepository          tagRepository,
+        IThumbnailService      thumbnailService,
+        IMetadataService       metadataService,
+        IAgentOrchestrator     agentOrchestrator,
+        ILogger<PhotoIndexer>  logger)
     {
-        _photoRepository = photoRepository;
-        _tagRepository = tagRepository;
-        _thumbnailService = thumbnailService;
-        _metadataService = metadataService;
-        _agentOrchestrator = agentOrchestrator;  // ← Inicializar
+        _photoRepository   = photoRepository;
+        _tagRepository     = tagRepository;
+        _thumbnailService  = thumbnailService;
+        _metadataService   = metadataService;
+        _agentOrchestrator = agentOrchestrator;
+        _logger            = logger;
     }
 
     private static readonly HashSet<string> SupportedExtensions = new(
@@ -69,10 +74,12 @@ public class PhotoIndexer : IPhotoIndexer
             .Where(f => SupportedExtensions.Contains(Path.GetExtension(f)))
             .ToList();
 
-        var progress = new IndexingProgress { TotalFound = allFiles.Count };
+        var progress  = new IndexingProgress { TotalFound = allFiles.Count };
         var processed = 0;
-        var batch = new List<Photo>();
+        var batch     = new List<Photo>();
 
+        _logger.LogInformation("[Indexer] Iniciando: {Total} archivos en '{Dir}'",
+            allFiles.Count, directory);
         OnProgressChanged(progress);
 
         foreach (var filePath in allFiles)
@@ -94,37 +101,37 @@ public class PhotoIndexer : IPhotoIndexer
                 }
 
                 processed++;
-                progress.Processed = processed;
+                progress.Processed   = processed;
                 progress.CurrentFile = Path.GetFileName(filePath);
                 OnProgressChanged(progress);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogDebug("[Indexer] Skipped '{File}': {Msg}", filePath, ex.Message);
                 processed++;
             }
         }
 
         if (batch.Count > 0)
             await SaveBatchAsync(batch, cancellationToken);
+
+        _logger.LogInformation("[Indexer] Completado: {Processed}/{Total} fotos indexadas",
+            processed, allFiles.Count);
     }
-
-
-
-
 
     private async Task SaveBatchAsync(List<Photo> batch, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[Indexer] Guardando batch de {batch.Count} fotos");
+        _logger.LogDebug("[Indexer] Guardando batch de {Count} fotos", batch.Count);
 
         // Fase 1: INSERT secuencial — necesitamos los IDs asignados antes de continuar
         foreach (var photo in batch)
         {
             var photoId = await _photoRepository.InsertPhotoAsync(photo);
-            photo.Id = photoId;
+            photo.Id    = photoId;
         }
 
         // Fase 2: Thumbnails en paralelo (I/O bound, 4 concurrentes máx.)
-        using var thumbSem = new SemaphoreSlim(4, 4);
+        using var thumbSem  = new SemaphoreSlim(4, 4);
         var thumbTasks = batch.Select(async photo =>
         {
             await thumbSem.WaitAsync(cancellationToken);
@@ -136,14 +143,14 @@ public class PhotoIndexer : IPhotoIndexer
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Indexer] Error thumbnail {photo.Id}: {ex.Message}");
+                _logger.LogWarning("[Indexer] Thumbnail foto {Id}: {Msg}", photo.Id, ex.Message);
             }
             finally { thumbSem.Release(); }
         });
         await Task.WhenAll(thumbTasks);
 
         // Fase 3: Agentes IA en paralelo (modelos ONNX son thread-safe, 2 concurrentes por RAM)
-        using var agentSem = new SemaphoreSlim(2, 2);
+        using var agentSem  = new SemaphoreSlim(2, 2);
         var agentTasks = batch.Select(async photo =>
         {
             if (cancellationToken.IsCancellationRequested) return;
@@ -154,47 +161,43 @@ public class PhotoIndexer : IPhotoIndexer
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Indexer] Error agentes foto {photo.Id}: {ex.Message}");
+                _logger.LogError("[Indexer] Error agentes foto {Id}: {Msg}", photo.Id, ex.Message);
             }
             finally { agentSem.Release(); }
         });
         await Task.WhenAll(agentTasks);
     }
 
-
-
     private async Task<Photo> CreatePhotoFromFileAsync(string filePath, string hash)
     {
-        var fileInfo = new FileInfo(filePath);
+        var fileInfo   = new FileInfo(filePath);
         var dimensions = await GetImageDimensionsAsync(filePath);
-
-        // Extraer metadata EXIF
-        var metadata = await _metadataService.ExtractMetadataAsync(filePath);
+        var metadata   = await _metadataService.ExtractMetadataAsync(filePath);
 
         return new Photo
         {
-            Path = filePath,
-            Hash = hash,
-            FileSize = fileInfo.Length,
-            DateTaken = metadata.DateTaken ?? fileInfo.LastWriteTime,
-            Width = dimensions.Width,
-            Height = dimensions.Height,
-            Latitude = metadata.Latitude,
-            Longitude = metadata.Longitude,
-            CameraModel = metadata.CameraModel,
-            LensModel = metadata.LensModel,
-            Aperture = metadata.Aperture,
-            ShutterSpeed = metadata.ShutterSpeed,
-            Iso = metadata.Iso,
-            FocalLength = metadata.FocalLength,
-            Orientation = metadata.Orientation,
-            Status = "Indexed",
-            CreatedAt = DateTime.UtcNow,
+            Path          = filePath,
+            Hash          = hash,
+            FileSize      = fileInfo.Length,
+            DateTaken     = metadata.DateTaken ?? fileInfo.LastWriteTime,
+            Width         = dimensions.Width,
+            Height        = dimensions.Height,
+            Latitude      = metadata.Latitude,
+            Longitude     = metadata.Longitude,
+            CameraModel   = metadata.CameraModel,
+            LensModel     = metadata.LensModel,
+            Aperture      = metadata.Aperture,
+            ShutterSpeed  = metadata.ShutterSpeed,
+            Iso           = metadata.Iso,
+            FocalLength   = metadata.FocalLength,
+            Orientation   = metadata.Orientation,
+            Status        = "Indexed",
+            CreatedAt     = DateTime.UtcNow,
             LastIndexedAt = DateTime.UtcNow
         };
     }
 
-    private string ComputeHash(string filePath)
+    private static string ComputeHash(string filePath)
     {
         using var stream = File.OpenRead(filePath);
         using var sha256 = System.Security.Cryptography.SHA256.Create();
@@ -202,7 +205,7 @@ public class PhotoIndexer : IPhotoIndexer
         return Convert.ToHexString(hash);
     }
 
-    private async Task<(int Width, int Height)> GetImageDimensionsAsync(string filePath)
+    private static async Task<(int Width, int Height)> GetImageDimensionsAsync(string filePath)
     {
         try
         {
@@ -216,10 +219,5 @@ public class PhotoIndexer : IPhotoIndexer
     }
 
     private void OnProgressChanged(IndexingProgress progress)
-    {
-        ProgressChanged?.Invoke(this, progress);
-    }
-
-
-
+        => ProgressChanged?.Invoke(this, progress);
 }

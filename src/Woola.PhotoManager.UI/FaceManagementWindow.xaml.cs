@@ -1,10 +1,12 @@
 ﻿using Dapper;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using Woola.PhotoManager.Common.Services;
 using Woola.PhotoManager.Core.Agents.Agents;
+using Woola.PhotoManager.Core.Services;
 using Woola.PhotoManager.Domain.Entities;
 using Woola.PhotoManager.Infrastructure.Database;
 using Woola.PhotoManager.Infrastructure.Repositories;
@@ -18,6 +20,7 @@ public partial class FaceManagementWindow : Window
     private readonly PhotoRepository _photoRepository;
     private readonly TagRepository _tagRepository;
     private readonly SqliteConnectionFactory _connectionFactory;
+    private readonly FaceClusteringService _clusteringService;
     private ObservableCollection<PersonGroup> _personGroups = new();
 
     public FaceManagementWindow()
@@ -30,9 +33,12 @@ public partial class FaceManagementWindow : Window
             "woola.db");
 
         _connectionFactory = new SqliteConnectionFactory(dbPath);
-        _faceRepository = new FaceRepository(_connectionFactory);
-        _photoRepository = new PhotoRepository(_connectionFactory);
-        _tagRepository = new TagRepository(_connectionFactory);
+        _faceRepository    = new FaceRepository(_connectionFactory);
+        _photoRepository   = new PhotoRepository(_connectionFactory);
+        _tagRepository     = new TagRepository(_connectionFactory);
+        _clusteringService = new FaceClusteringService(
+            _faceRepository,
+            NullLogger<FaceClusteringService>.Instance);
 
         PersonGroupsList.ItemsSource = _personGroups;
 
@@ -272,144 +278,36 @@ public partial class FaceManagementWindow : Window
         var statusText = FindName("StatusText") as System.Windows.Controls.TextBlock;
         var clusterBtn = sender as System.Windows.Controls.Button;
 
-        if (statusText != null) statusText.Text = "Cargando embeddings...";
+        if (statusText != null) statusText.Text = "Agrupando rostros por similitud...";
         if (clusterBtn != null) clusterBtn.IsEnabled = false;
 
         try
         {
-            var facesWithEncoding = (await _faceRepository.GetFacesWithEncodingAsync()).ToList();
+            // IMP-002: delega al FaceClusteringService (centroide dinámico, average-linkage)
+            var result = await _clusteringService.ClusterAsync(threshold: 0.65f);
 
-            if (facesWithEncoding.Count == 0)
+            if (result.TotalFaces == 0)
             {
                 MessageBox.Show("No hay rostros con embeddings. Primero usa 'Reprocesar Rostros'.",
                                 "Sin datos", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            var faceTuples = facesWithEncoding
-                .Select(f => (face: f, emb: DeserializeEmbedding(f.Encoding!)))
-                .Where(t => t.emb.Any(v => v != 0f))
-                .ToList();
-
             if (statusText != null)
-                statusText.Text = $"Agrupando {faceTuples.Count} rostros...";
+                statusText.Text = $"Agrupados: {result.ClusterCount} personas de {result.TotalFaces} rostros ({result.UpdatedFaces} actualizados)";
 
-            var clusters = ClusterFacesByEmbedding(
-                faceTuples.Select(t => t.emb).ToList(),
-                faceTuples.Select(t => t.face).ToList());
-
-            var updated = 0;
-            foreach (var cluster in clusters)
-            {
-                var existingPersonId = cluster.FirstOrDefault(f => !string.IsNullOrEmpty(f.PersonId))?.PersonId
-                                       ?? Guid.NewGuid().ToString();
-                foreach (var face in cluster)
-                {
-                    if (face.PersonId != existingPersonId)
-                    {
-                        await _faceRepository.UpdatePersonIdAsync(face.Id, existingPersonId);
-                        updated++;
-                    }
-                }
-            }
-
-            if (statusText != null)
-                statusText.Text = $"Agrupados: {clusters.Count} grupos de {faceTuples.Count} rostros ({updated} actualizados)";
             LoadGroups();
         }
         catch (Exception ex)
         {
             var statusText2 = FindName("StatusText") as System.Windows.Controls.TextBlock;
             if (statusText2 != null) statusText2.Text = $"Error: {ex.Message}";
+            MessageBox.Show($"Error al agrupar: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
             if (clusterBtn != null) clusterBtn.IsEnabled = true;
         }
-    }
-
-    private List<List<Face>> ClusterFacesByEmbedding(List<float[]> embeddings, List<Face> faces)
-    {
-        var groups = new List<List<Face>>();
-        var used = new bool[faces.Count];
-
-        for (int i = 0; i < faces.Count; i++)
-        {
-            if (used[i]) continue;
-            var group = new List<Face> { faces[i] };
-            used[i] = true;
-
-            for (int j = i + 1; j < faces.Count; j++)
-            {
-                if (used[j]) continue;
-                if (CosineSimilarity(embeddings[i], embeddings[j]) > 0.6f)
-                {
-                    group.Add(faces[j]);
-                    used[j] = true;
-                }
-            }
-            groups.Add(group);
-        }
-        return groups;
-    }
-
-    private float[] DeserializeEmbedding(byte[] bytes)
-    {
-        var floats = new float[bytes.Length / 4];
-        Buffer.BlockCopy(bytes, 0, floats, 0, bytes.Length);
-        return floats;
-    }
-
-    private List<List<(Photo photo, DetectedFace detectedFace, float[] embedding)>> ClusterFaces(
-        List<(Photo photo, DetectedFace detectedFace, float[] embedding)> faces)
-    {
-        var groups = new List<List<(Photo photo, DetectedFace detectedFace, float[] embedding)>>();
-        var used = new bool[faces.Count];
-
-        for (int i = 0; i < faces.Count; i++)
-        {
-            if (used[i]) continue;
-
-            var group = new List<(Photo, DetectedFace, float[])> { faces[i] };
-            used[i] = true;
-
-            for (int j = i + 1; j < faces.Count; j++)
-            {
-                if (used[j]) continue;
-
-                var similarity = CosineSimilarity(faces[i].embedding, faces[j].embedding);
-
-                // Si la similitud es mayor a 0.6, son la misma persona
-                if (similarity > 0.6f)
-                {
-                    group.Add(faces[j]);
-                    used[j] = true;
-                }
-            }
-
-            groups.Add(group);
-        }
-
-        return groups;
-    }
-
-
-    private float CosineSimilarity(float[] a, float[] b)
-    {
-        if (a.Length != b.Length) return 0;
-
-        float dot = 0, magA = 0, magB = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            magA += a[i] * a[i];
-            magB += b[i] * b[i];
-        }
-
-        magA = (float)Math.Sqrt(magA);
-        magB = (float)Math.Sqrt(magB);
-
-        return magA == 0 || magB == 0 ? 0 : dot / (magA * magB);
     }
 
     private byte[] SerializeEmbedding(float[] embedding)

@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Woola.PhotoManager.Common.Services;
 using Woola.PhotoManager.Core.Agents;
 using Woola.PhotoManager.Core.Agents.Agents;
@@ -55,6 +56,7 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<IAutoTaggingService, AutoTaggingService>();
                 services.AddSingleton<IHybridSearchService, HybridSearchService>();
                 services.AddSingleton<IEventDetectionService, EventDetectionService>(); // G3
+                services.AddSingleton<IFaceClusteringService, FaceClusteringService>(); // IMP-002
                 services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
                 services.AddSingleton<IPhotoIndexer, PhotoIndexer>();
 
@@ -75,7 +77,8 @@ public partial class App : System.Windows.Application
         orchestrator.RegisterAgent(new FaceAgent(
             sp.GetRequiredService<IFaceService>(),
             sp.GetRequiredService<FaceRepository>(),
-            sp.GetRequiredService<TagRepository>()));
+            sp.GetRequiredService<TagRepository>(),
+            sp.GetRequiredService<ILogger<FaceAgent>>()));
         orchestrator.RegisterAgent(new SceneAgent(sp.GetRequiredService<TagRepository>()));   // D2 P6
         orchestrator.RegisterAgent(new QualityAgent(sp.GetRequiredService<IQualityAssessmentService>())); // D4 P7
 
