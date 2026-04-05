@@ -156,4 +156,39 @@ public class PhotoRepository
         const string sql = "UPDATE Photos SET ThumbnailPath = @ThumbnailPath WHERE Id = @Id";
         await connection.ExecuteAsync(sql, new { Id = id, ThumbnailPath = thumbnailPath });
     }
+
+    // ── G3: Event detection helpers ──────────────────────────────────────────
+
+    /// <summary>
+    /// Todos los DateTaken (un valor por foto, con duplicados) para clustering en memoria.
+    /// </summary>
+    public async Task<IEnumerable<DateTime>> GetAllDateTakenAsync()
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QueryAsync<DateTime>(
+            "SELECT DateTaken FROM Photos WHERE DateTaken IS NOT NULL ORDER BY DateTaken");
+    }
+
+    /// <summary>
+    /// Fotos cuyo DateTaken cae en [start, end) — end es exclusivo.
+    /// </summary>
+    public async Task<IEnumerable<Photo>> GetPhotosByDateRangeAsync(
+        DateTime start, DateTime end, int limit = 2000)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        const string sql = @"
+            SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height,
+                   Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed,
+                   Iso, FocalLength, Orientation, Status, ThumbnailPath, CreatedAt, LastIndexedAt
+            FROM Photos
+            WHERE DateTaken >= @Start AND DateTaken < @End
+            ORDER BY DateTaken DESC
+            LIMIT @Limit";
+        return await connection.QueryAsync<Photo>(sql, new
+        {
+            Start = start.ToIsoString(),
+            End   = end.ToIsoString(),
+            Limit = limit
+        });
+    }
 }

@@ -39,6 +39,8 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<PhotoRepository>();
                 services.AddSingleton<TagRepository>();
                 services.AddSingleton<FaceRepository>();
+                services.AddSingleton<AlbumRepository>();   // G1
+                services.AddSingleton<StatsRepository>();   // G5
 
                 // Common Services (Singleton: modelos ONNX son costosos de cargar)
                 services.AddSingleton<IThumbnailService, ThumbnailService>();
@@ -52,6 +54,7 @@ public partial class App : System.Windows.Application
                 // Core Services
                 services.AddSingleton<IAutoTaggingService, AutoTaggingService>();
                 services.AddSingleton<IHybridSearchService, HybridSearchService>();
+                services.AddSingleton<IEventDetectionService, EventDetectionService>(); // G3
                 services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
                 services.AddSingleton<IPhotoIndexer, PhotoIndexer>();
 

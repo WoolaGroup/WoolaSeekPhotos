@@ -116,6 +116,27 @@ public class SqliteConnectionFactory
     );
 
         CREATE INDEX IF NOT EXISTS idx_faces_person ON Faces(PersonName);
+
+        -- G1: Álbumes
+        CREATE TABLE IF NOT EXISTS Albums (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Name TEXT NOT NULL,
+            Description TEXT,
+            CoverPhotoId INTEGER,
+            CreatedAt TEXT NOT NULL,
+            FOREIGN KEY(CoverPhotoId) REFERENCES Photos(Id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS AlbumPhotos (
+            AlbumId INTEGER NOT NULL,
+            PhotoId INTEGER NOT NULL,
+            AddedAt TEXT NOT NULL,
+            PRIMARY KEY (AlbumId, PhotoId),
+            FOREIGN KEY(AlbumId) REFERENCES Albums(Id) ON DELETE CASCADE,
+            FOREIGN KEY(PhotoId) REFERENCES Photos(Id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_albumphotos_album ON AlbumPhotos(AlbumId);
     ";
 
         using var command = new SqliteCommand(sql, connection);

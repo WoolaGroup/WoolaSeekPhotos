@@ -1,21 +1,40 @@
 using System.Windows;
+using Woola.PhotoManager.Infrastructure.Repositories;
 using Woola.PhotoManager.UI.ViewModels;
 
 namespace Woola.PhotoManager.UI;
 
 public partial class MainWindow : Window
 {
-    private readonly MainViewModel _vm;
+    private readonly MainViewModel   _vm;
+    private readonly AlbumRepository _albumRepository;
+    private readonly PhotoRepository _photoRepository;
+    private readonly StatsRepository _statsRepository;
 
-    public MainWindow(MainViewModel vm)
+    public MainWindow(MainViewModel vm,
+                      AlbumRepository albumRepository,
+                      PhotoRepository photoRepository,
+                      StatsRepository statsRepository)
     {
         InitializeComponent();
-        _vm = vm;
-        DataContext = vm;
+        _vm              = vm;
+        _albumRepository = albumRepository;
+        _photoRepository = photoRepository;
+        _statsRepository = statsRepository;
+        DataContext      = vm;
 
         vm.ErrorOccurred += (_, msg) =>
             System.Windows.MessageBox.Show(msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
     }
+
+    private async void AlbumsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        new AlbumWindow(_albumRepository, _photoRepository) { Owner = this }.ShowDialog();
+        await _vm.RefreshAlbumsAsync();
+    }
+
+    private void DashboardBtn_Click(object sender, RoutedEventArgs e)
+        => new DashboardWindow(_statsRepository) { Owner = this }.ShowDialog();
 
     private void FaceManagementBtn_Click(object sender, RoutedEventArgs e)
         => new FaceManagementWindow { Owner = this }.ShowDialog();

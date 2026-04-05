@@ -157,6 +157,39 @@
                                FontSize="11" Foreground="#AAAAAA"
                                TextWrapping="Wrap"/>
 
+                    <!-- G1: ÁLBUMES -->
+                    <TextBlock Text="ÁLBUM" Style="{StaticResource SectionHeader}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        <ComboBox ItemsSource="{Binding AvailableAlbums}"
+                                  SelectedItem="{Binding SelectedAlbum}"
+                                  DisplayMemberPath="Name"
+                                  Width="155" Height="28"
+                                  Background="#252525" Foreground="White"
+                                  BorderBrush="#444444" FontSize="11"
+                                  VerticalContentAlignment="Center"/>
+                        <Button Content="＋ Agregar"
+                                Command="{Binding AddToAlbumCommand}"
+                                Background="#0078D4" Foreground="White"
+                                BorderThickness="0" Padding="10,5"
+                                Margin="8,0,0,0" FontSize="11" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                            CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter Property="Opacity" Value="0.4"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
+                    <TextBlock Text="{Binding AlbumAddStatus}"
+                               FontSize="10" Foreground="#7BB8F0" Margin="0,5,0,0"/>
+
                 </StackPanel>
             </ScrollViewer>
         </Grid>
