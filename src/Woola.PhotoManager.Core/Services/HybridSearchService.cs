@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Woola.PhotoManager.Common.Services;
 using Woola.PhotoManager.Domain.Entities;
 using Woola.PhotoManager.Infrastructure.Repositories;
@@ -9,6 +10,10 @@ public class HybridSearchService : IHybridSearchService
     private readonly PhotoRepository _photoRepository;
     private readonly TagRepository _tagRepository;
     private readonly TextEmbeddingService _embeddingService;
+
+    // F4: TTL cache — avoids re-running expensive prefilter + embedding for repeated queries
+    private readonly ConcurrentDictionary<string, (DateTime ExpiresAt, List<HybridSearchResult> Results)> _cache = new();
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(60);
 
     public HybridSearchService(PhotoRepository photoRepository, TagRepository tagRepository,
         TextEmbeddingService embeddingService)
@@ -22,6 +27,11 @@ public class HybridSearchService : IHybridSearchService
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
         var queryLower = query.Trim().ToLowerInvariant();
+
+        // F4: Return cached result if still fresh
+        var cacheKey = $"{queryLower}:{limit}";
+        if (_cache.TryGetValue(cacheKey, out var entry) && DateTime.UtcNow < entry.ExpiresAt)
+            return entry.Results;
 
         // Paso 1: prefilter SQL (≤500 candidatos, rápido)
         var candidates = await _photoRepository.SearchCandidatesAsync(queryLower, limit: 500);
@@ -69,6 +79,13 @@ public class HybridSearchService : IHybridSearchService
                 results.Add(new HybridSearchResult(photo, Math.Min(score, 2.0f), exactMatches));
         }
 
-        return [.. results.OrderByDescending(r => r.Score).Take(limit)];
+        var sorted = results.OrderByDescending(r => r.Score).Take(limit).ToList();
+
+        // F4: Store in cache with TTL
+        _cache[cacheKey] = (DateTime.UtcNow.Add(CacheTtl), sorted);
+
+        return sorted;
     }
+
+    public void InvalidateCache() => _cache.Clear();
 }

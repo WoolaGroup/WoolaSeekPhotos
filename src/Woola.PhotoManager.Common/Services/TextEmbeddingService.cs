@@ -1,4 +1,5 @@
-﻿using Microsoft.ML.OnnxRuntime;
+﻿using System.Collections.Concurrent;
+using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace Woola.PhotoManager.Common.Services;
@@ -9,6 +10,10 @@ public class TextEmbeddingService : IDisposable
     private readonly int _embeddingSize = 384;
     private bool _isInitialized;
     private bool _modelAvailable;
+
+    // F4: Embedding cache — avoids re-running ONNX for repeated queries/tag strings
+    private readonly ConcurrentDictionary<string, float[]> _embeddingCache = new();
+    private const int MaxCacheSize = 2000;
 
     public TextEmbeddingService()
     {
@@ -52,10 +57,11 @@ public class TextEmbeddingService : IDisposable
     public float[] GenerateEmbedding(string text)
     {
         if (!_modelAvailable || _session == null)
-        {
-            // Devolver embedding vacío en lugar de lanzar excepción
             return new float[_embeddingSize];
-        }
+
+        // F4: Return cached embedding if available
+        if (_embeddingCache.TryGetValue(text, out var cached))
+            return cached;
 
         try
         {
@@ -82,6 +88,10 @@ public class TextEmbeddingService : IDisposable
                 for (int i = 0; i < embedding.Length; i++)
                     embedding[i] /= norm;
             }
+
+            // F4: Store in cache (simple size cap — evict nothing, just stop storing)
+            if (_embeddingCache.Count < MaxCacheSize)
+                _embeddingCache[text] = embedding;
 
             return embedding;
         }

@@ -116,41 +116,49 @@ public class PhotoIndexer : IPhotoIndexer
     {
         Console.WriteLine($"[Indexer] Guardando batch de {batch.Count} fotos");
 
+        // Fase 1: INSERT secuencial — necesitamos los IDs asignados antes de continuar
         foreach (var photo in batch)
         {
             var photoId = await _photoRepository.InsertPhotoAsync(photo);
             photo.Id = photoId;
-            Console.WriteLine($"[Indexer] Foto guardada ID: {photoId}");
         }
 
-        // Generar thumbnails
-        foreach (var photo in batch)
+        // Fase 2: Thumbnails en paralelo (I/O bound, 4 concurrentes máx.)
+        using var thumbSem = new SemaphoreSlim(4, 4);
+        var thumbTasks = batch.Select(async photo =>
         {
+            await thumbSem.WaitAsync(cancellationToken);
             try
             {
-                var thumbnailPath = await _thumbnailService.GenerateThumbnailAsync(photo.Path, cancellationToken);
-                photo.ThumbnailPath = thumbnailPath;
-                await _photoRepository.UpdateThumbnailPathAsync(photo.Id, thumbnailPath);
+                var tp = await _thumbnailService.GenerateThumbnailAsync(photo.Path, cancellationToken);
+                photo.ThumbnailPath = tp;
+                await _photoRepository.UpdateThumbnailPathAsync(photo.Id, tp);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Indexer] Error generando thumbnail: {ex.Message}");
+                Console.WriteLine($"[Indexer] Error thumbnail {photo.Id}: {ex.Message}");
             }
-        }
+            finally { thumbSem.Release(); }
+        });
+        await Task.WhenAll(thumbTasks);
 
-        // Procesar con agentes IA (metadata, tags, visión, OCR, rostros)
-        foreach (var photo in batch)
+        // Fase 3: Agentes IA en paralelo (modelos ONNX son thread-safe, 2 concurrentes por RAM)
+        using var agentSem = new SemaphoreSlim(2, 2);
+        var agentTasks = batch.Select(async photo =>
         {
-            if (cancellationToken.IsCancellationRequested) break;
+            if (cancellationToken.IsCancellationRequested) return;
+            await agentSem.WaitAsync(cancellationToken);
             try
             {
                 await _agentOrchestrator.ProcessPhotoAsync(photo, cancellationToken);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Indexer] Error procesando agentes para foto {photo.Id}: {ex.Message}");
+                Console.WriteLine($"[Indexer] Error agentes foto {photo.Id}: {ex.Message}");
             }
-        }
+            finally { agentSem.Release(); }
+        });
+        await Task.WhenAll(agentTasks);
     }
 
 

@@ -344,46 +344,64 @@
                 <!-- Fotos -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding Photos}"
-                                  VirtualizingStackPanel.IsVirtualizing="True">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Margin="15"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Command="{Binding DataContext.SelectPhotoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                        CommandParameter="{Binding}"
-                                        Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                                    <Border Style="{StaticResource PhotoCard}" Width="220">
-                                        <StackPanel>
-                                            <Border Height="180" CornerRadius="8,8,0,0" Background="#1A1A1A">
-                                                <Image Source="{Binding ThumbnailPath}"
-                                                       Stretch="Uniform"
-                                                       VerticalAlignment="Center"/>
-                                            </Border>
-                                            <StackPanel Margin="12,10,12,12">
-                                                <TextBlock Text="{Binding FileName}"
-                                                           FontSize="12"
-                                                           Foreground="{StaticResource TextPrimary}"
-                                                           TextWrapping="Wrap"
-                                                           MaxHeight="35"/>
-                                                <TextBlock Text="{Binding DateTaken, StringFormat='dd/MM/yyyy'}"
-                                                           FontSize="10"
-                                                           Foreground="{StaticResource TextSecondary}"
-                                                           Margin="0,5,0,0"/>
-                                                <TextBlock Text="{Binding CameraModel}"
-                                                           FontSize="9"
-                                                           Foreground="{StaticResource TextMuted}"
-                                                           Margin="0,3,0,0"/>
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding Photos}"
+                                      VirtualizingStackPanel.IsVirtualizing="True">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Margin="15"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Command="{Binding DataContext.SelectPhotoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
+                                        <Border Style="{StaticResource PhotoCard}" Width="220">
+                                            <StackPanel>
+                                                <Border Height="180" CornerRadius="8,8,0,0" Background="#1A1A1A">
+                                                    <Image Source="{Binding ThumbnailPath}"
+                                                           Stretch="Uniform"
+                                                           VerticalAlignment="Center"/>
+                                                </Border>
+                                                <StackPanel Margin="12,10,12,12">
+                                                    <TextBlock Text="{Binding FileName}"
+                                                               FontSize="12"
+                                                               Foreground="{StaticResource TextPrimary}"
+                                                               TextWrapping="Wrap"
+                                                               MaxHeight="35"/>
+                                                    <TextBlock Text="{Binding DateTaken, StringFormat='dd/MM/yyyy'}"
+                                                               FontSize="10"
+                                                               Foreground="{StaticResource TextSecondary}"
+                                                               Margin="0,5,0,0"/>
+                                                    <TextBlock Text="{Binding CameraModel}"
+                                                               FontSize="9"
+                                                               Foreground="{StaticResource TextMuted}"
+                                                               Margin="0,3,0,0"/>
+                                                </StackPanel>
                                             </StackPanel>
-                                        </StackPanel>
-                                    </Border>
-                                </Button>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                        </Border>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- F2: Cargar más -->
+                        <Button Command="{Binding LoadMoreCommand}"
+                                Visibility="{Binding HasMorePhotos, Converter={StaticResource BoolToVis}}"
+                                HorizontalAlignment="Center"
+                                Margin="0,8,0,24"
+                                Padding="24,12"
+                                Background="#252525"
+                                Foreground="#AAAAAA"
+                                FontSize="13">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="📥" Margin="0,0,8,0"/>
+                                <TextBlock Text="{Binding PageInfoText}"/>
+                                <TextBlock Text=" — Cargar más" Foreground="#666666"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </ScrollViewer>
 
                 <!-- Loading overlay -->
@@ -422,6 +440,8 @@
                                Foreground="{StaticResource TextSecondary}" FontSize="12"/>
                     <TextBlock Text="{Binding PhotoCountStatus}"
                                Foreground="{StaticResource TextMuted}" FontSize="12" Margin="20,0,0,0"/>
+                    <TextBlock Text="{Binding PageInfoText}"
+                               Foreground="#444444" FontSize="12" Margin="20,0,0,0"/>
                 </StackPanel>
             </Border>
         </Grid>

@@ -21,6 +21,11 @@ public partial class MainViewModel : ObservableObject
     private CancellationTokenSource? _indexingCts;
     private readonly HashSet<string> _activeTagNames = new();
 
+    // F2: Pagination state
+    private const int PageSize = 50;
+    private int _currentOffset = 0;
+    private int _totalCount = 0;
+
     public ObservableCollection<PhotoViewModel> Photos { get; } = new();
     public ObservableCollection<Tag> Tags { get; } = new();
     public ObservableCollection<FilterChip> ActiveFilters { get; } = new();
@@ -45,6 +50,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private PhotoDetailViewModel? _selectedPhoto;
     [ObservableProperty] private bool _isLoadingPhotos = true;
     [ObservableProperty] private bool _hasNoPhotos;
+    [ObservableProperty] private bool _hasMorePhotos;
+    [ObservableProperty] private string _pageInfoText = string.Empty;
 
     public MainViewModel(
         IPhotoIndexer photoIndexer,
@@ -74,7 +81,16 @@ public partial class MainViewModel : ObservableObject
     partial void OnSearchTextChanged(string value)
     {
         if (IsHybridModeVisible) return;
-        _ = string.IsNullOrEmpty(value) ? LoadPhotosAsync() : FastSearchAsync(value);
+        if (string.IsNullOrEmpty(value))
+        {
+            HasMorePhotos = false;
+            _ = LoadPhotosAsync(reset: true);
+        }
+        else
+        {
+            HasMorePhotos = false;
+            _ = FastSearchAsync(value);
+        }
     }
 
     private async Task InitializeAsync()
@@ -83,23 +99,42 @@ public partial class MainViewModel : ObservableObject
         await LoadTagsAsync();
     }
 
-    private async Task LoadPhotosAsync()
+    private async Task LoadPhotosAsync(bool reset = true)
     {
         IsLoadingPhotos = true;
         try
         {
-            var photos = await _photoRepository.GetPhotosAsync(limit: 1000);
-            var sorted = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt);
+            if (reset)
+            {
+                _currentOffset = 0;
+                _totalCount = await _photoRepository.GetTotalCountAsync();
+                System.Windows.Application.Current.Dispatcher.Invoke(() => Photos.Clear());
+            }
+
+            var photos = await _photoRepository.GetPhotosAsync(limit: PageSize, offset: _currentOffset);
+            var sorted = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt).ToList();
 
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                Photos.Clear();
                 foreach (var photo in sorted)
                     Photos.Add(new PhotoViewModel(photo));
 
-                PhotoCountText = Photos.Count.ToString();
-                PhotoCountStatus = $"{Photos.Count} fotos";
-                StatusText = $"{Photos.Count} fotos cargadas";
+                _currentOffset += sorted.Count;
+
+                var isFiltered = _activeTagNames.Count > 0 || IsHybridModeVisible;
+                HasMorePhotos = !isFiltered && sorted.Count >= PageSize;
+                PhotoCountText = _totalCount.ToString();
+                PhotoCountStatus = isFiltered ? $"{Photos.Count} resultados" : $"{Photos.Count} fotos";
+                PageInfoText = _totalCount > 0 && !isFiltered
+                    ? $"Mostrando {Photos.Count} de {_totalCount}"
+                    : string.Empty;
+
+                if (reset)
+                    StatusText = isFiltered
+                        ? $"{Photos.Count} fotos filtradas"
+                        : $"{Photos.Count} de {_totalCount} fotos";
+                else
+                    StatusText = $"Cargadas {Photos.Count} de {_totalCount} fotos";
             });
         }
         finally
@@ -107,6 +142,13 @@ public partial class MainViewModel : ObservableObject
             IsLoadingPhotos = false;
             UpdatePhotoState();
         }
+    }
+
+    [RelayCommand]
+    private async Task LoadMoreAsync()
+    {
+        if (!HasMorePhotos || IsLoadingPhotos) return;
+        await LoadPhotosAsync(reset: false);
     }
 
     private async Task LoadTagsAsync()
@@ -186,7 +228,7 @@ public partial class MainViewModel : ObservableObject
         StatusText = "Búsqueda cancelada";
         ActiveFilters.Clear();
         _activeTagNames.Clear();
-        _ = LoadPhotosAsync();
+        _ = LoadPhotosAsync(reset: true);
     }
 
     [RelayCommand]
@@ -195,8 +237,7 @@ public partial class MainViewModel : ObservableObject
         IsHybridModeVisible = false;
         _activeTagNames.Clear();
         ActiveFilters.Clear();
-        await LoadPhotosAsync();
-        StatusText = $"Mostrando todas las fotos ({Photos.Count})";
+        await LoadPhotosAsync(reset: true);
     }
 
     [RelayCommand]
@@ -285,7 +326,8 @@ public partial class MainViewModel : ObservableObject
         try
         {
             await _photoIndexer.StartIndexingAsync(folderPath, _indexingCts.Token);
-            await LoadPhotosAsync();
+            _hybridSearchService.InvalidateCache();   // F4: stale after new photos added
+            await LoadPhotosAsync(reset: true);
         }
         catch (Exception ex)
         {
@@ -314,21 +356,21 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            var allPhotos = await _photoRepository.GetPhotosAsync(limit: 10000);
+            var allPhotos = (await _photoRepository.GetPhotosAsync(limit: 10000)).ToList();
+            var total = allPhotos.Count;
             var processed = 0;
-            var total = allPhotos.Count();
 
-            foreach (var photo in allPhotos)
-            {
-                await _autoTaggingService.UpdateTagsForExistingPhotoAsync(photo.Id, photo);
-                processed++;
-
-                if (processed % 50 == 0)
+            // F1: Parallelizar con 4 workers concurrentes
+            await Parallel.ForEachAsync(allPhotos,
+                new ParallelOptions { MaxDegreeOfParallelism = 4 },
+                async (photo, _) =>
                 {
-                    StatusText = $"Reprocesando tags: {processed}/{total} fotos";
-                    await Task.Delay(10);
-                }
-            }
+                    await _autoTaggingService.UpdateTagsForExistingPhotoAsync(photo.Id, photo);
+                    var p = System.Threading.Interlocked.Increment(ref processed);
+                    if (p % 50 == 0)
+                        System.Windows.Application.Current.Dispatcher.Invoke(
+                            () => StatusText = $"Reprocesando tags: {p}/{total}");
+                });
 
             StatusText = $"Tags reprocesados: {processed} fotos";
             await LoadTagsAsync();

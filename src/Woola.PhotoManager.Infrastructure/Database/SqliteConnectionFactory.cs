@@ -28,6 +28,11 @@ public class SqliteConnectionFactory
         using var connection = new SqliteConnection(_connectionString);
         connection.Open();
 
+        // WAL mode: concurrent reads during writes + higher throughput for parallel indexing
+        using var walCmd = new SqliteCommand(
+            "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", connection);
+        walCmd.ExecuteNonQuery();
+
         var sql = @"
         CREATE TABLE IF NOT EXISTS Photos (
             Id INTEGER PRIMARY KEY AUTOINCREMENT,
