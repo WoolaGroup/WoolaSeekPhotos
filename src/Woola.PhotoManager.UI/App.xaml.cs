@@ -47,6 +47,7 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<IOcrService, OcrService>();
                 services.AddSingleton<IFaceService, FaceService>();
                 services.AddSingleton<TextEmbeddingService>();
+                services.AddSingleton<IQualityAssessmentService, QualityAssessmentService>(); // D4
 
                 // Core Services
                 services.AddSingleton<IAutoTaggingService, AutoTaggingService>();
@@ -72,6 +73,8 @@ public partial class App : System.Windows.Application
             sp.GetRequiredService<IFaceService>(),
             sp.GetRequiredService<FaceRepository>(),
             sp.GetRequiredService<TagRepository>()));
+        orchestrator.RegisterAgent(new SceneAgent(sp.GetRequiredService<TagRepository>()));   // D2 P6
+        orchestrator.RegisterAgent(new QualityAgent(sp.GetRequiredService<IQualityAssessmentService>())); // D4 P7
 
         await _host.StartAsync();
         sp.GetRequiredService<MainWindow>().Show();
