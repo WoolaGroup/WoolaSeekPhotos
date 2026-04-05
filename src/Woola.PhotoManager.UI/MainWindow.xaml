@@ -300,6 +300,22 @@
                         </StackPanel>
                     </Button>
 
+                    <!-- IMP-005/010: HERRAMIENTAS ─────────────── -->
+                    <Button x:Name="DuplicatesBtn" Click="DuplicatesBtn_Click"
+                            Style="{StaticResource SecondaryButton}" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔄" FontSize="14" Margin="0,0,8,0"/>
+                            <TextBlock Text="Duplicados"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SettingsBtn" Click="SettingsBtn_Click"
+                            Style="{StaticResource SecondaryButton}" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚙️" FontSize="14" Margin="0,0,8,0"/>
+                            <TextBlock Text="Configuración"/>
+                        </StackPanel>
+                    </Button>
+
                     <!-- Carpeta seleccionada -->
                     <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
                     <TextBlock Text="CARPETA" FontSize="11"

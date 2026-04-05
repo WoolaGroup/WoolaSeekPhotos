@@ -18,6 +18,9 @@ public partial class App : System.Windows.Application
 {
     private IHost? _host;
 
+    /// <summary>IMP-009: Acceso estático al contenedor DI para ventanas sin inyección directa.</summary>
+    public static IServiceProvider Services => ((App)Current)._host!.Services;
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -57,6 +60,9 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<IHybridSearchService, HybridSearchService>();
                 services.AddSingleton<IEventDetectionService, EventDetectionService>(); // G3
                 services.AddSingleton<IFaceClusteringService, FaceClusteringService>(); // IMP-002
+                services.AddSingleton<ISettingsService, SettingsService>();              // IMP-010
+                services.AddSingleton<IDuplicateDetectionService, DuplicateDetectionService>(); // IMP-005
+                services.AddSingleton<ISimilarPhotosService, SimilarPhotosService>();    // IMP-009
                 services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
                 services.AddSingleton<IPhotoIndexer, PhotoIndexer>();
 
@@ -81,6 +87,8 @@ public partial class App : System.Windows.Application
             sp.GetRequiredService<ILogger<FaceAgent>>()));
         orchestrator.RegisterAgent(new SceneAgent(sp.GetRequiredService<TagRepository>()));   // D2 P6
         orchestrator.RegisterAgent(new QualityAgent(sp.GetRequiredService<IQualityAssessmentService>())); // D4 P7
+        orchestrator.RegisterAgent(new GeoLocationAgent());     // IMP-006 P8
+        orchestrator.RegisterAgent(new ClaudeVisionAgent());    // IMP-007 P9
 
         await _host.StartAsync();
         sp.GetRequiredService<MainWindow>().Show();

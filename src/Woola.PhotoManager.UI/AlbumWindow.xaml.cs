@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Woola.PhotoManager.Core.Services;
 using Woola.PhotoManager.Domain.Entities;
 using Woola.PhotoManager.Infrastructure.Repositories;
 using Brushes    = System.Windows.Media.Brushes;
@@ -18,12 +19,18 @@ public partial class AlbumWindow : Window
 {
     private readonly AlbumRepository  _albumRepository;
     private readonly PhotoRepository  _photoRepository;
-    private int _selectedAlbumId = -1;
+    private readonly TagRepository    _tagRepository;
+    private readonly ExportService    _exportService;
+    private int    _selectedAlbumId   = -1;
+    private string _selectedAlbumName = string.Empty;
 
-    public AlbumWindow(AlbumRepository albumRepository, PhotoRepository photoRepository)
+    public AlbumWindow(AlbumRepository albumRepository, PhotoRepository photoRepository,
+                       TagRepository tagRepository)
     {
         _albumRepository = albumRepository;
         _photoRepository = photoRepository;
+        _tagRepository   = tagRepository;
+        _exportService   = new ExportService(_albumRepository, _photoRepository, _tagRepository);
         InitializeComponent();
         _ = LoadAlbumsAsync();
         _ = LoadRecentPhotosAsync();
@@ -47,7 +54,8 @@ public partial class AlbumWindow : Window
     private void AlbumListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (AlbumListBox.SelectedItem is not Album album) return;
-        _selectedAlbumId = album.Id;
+        _selectedAlbumId   = album.Id;
+        _selectedAlbumName = album.Name;
         AlbumNameTxt.Text  = album.Name;
         AlbumCountTxt.Text = $"{album.PhotoCount} foto{(album.PhotoCount != 1 ? "s" : "")}";
         _ = LoadAlbumPhotosAsync(album.Id);
@@ -187,6 +195,54 @@ public partial class AlbumWindow : Window
         await _albumRepository.CreateAlbumAsync(dialog.AlbumName.Trim(), dialog.AlbumDescription?.Trim());
         StatusTxt.Text = $"Álbum '{dialog.AlbumName}' creado.";
         await LoadAlbumsAsync();
+    }
+
+    // ── Exportar álbum como ZIP ───────────────────────────────────────────────
+
+    private async void ExportZipBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedAlbumId == -1)
+        {
+            MessageBox.Show("Selecciona un álbum primero.", "Sin álbum",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var saveDialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title      = "Guardar álbum como ZIP",
+            Filter     = "Archivo ZIP|*.zip",
+            FileName   = $"{_selectedAlbumName}_{DateTime.Now:yyyy-MM-dd}.zip",
+            DefaultExt = ".zip"
+        };
+
+        if (saveDialog.ShowDialog() != true) return;
+
+        ExportZipBtn.IsEnabled = false;
+        StatusTxt.Text = "Exportando...";
+
+        try
+        {
+            var progress = new Progress<string>(msg =>
+                Dispatcher.Invoke(() => StatusTxt.Text = msg));
+
+            var zipPath = await _exportService.ExportAlbumToZipAsync(
+                _selectedAlbumId, _selectedAlbumName, saveDialog.FileName, progress);
+
+            StatusTxt.Text = $"✓ ZIP creado: {System.IO.Path.GetFileName(zipPath)}";
+            MessageBox.Show($"Álbum exportado correctamente:\n{zipPath}",
+                            "Exportación completa", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            StatusTxt.Text = $"Error al exportar: {ex.Message}";
+            MessageBox.Show($"Error al exportar: {ex.Message}", "Error",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            ExportZipBtn.IsEnabled = true;
+        }
     }
 
     // ── Eliminar álbum ────────────────────────────────────────────────────────

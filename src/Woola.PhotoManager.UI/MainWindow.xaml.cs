@@ -1,4 +1,6 @@
 using System.Windows;
+using Woola.PhotoManager.Core.Agents;
+using Woola.PhotoManager.Core.Services;
 using Woola.PhotoManager.Infrastructure.Repositories;
 using Woola.PhotoManager.UI.ViewModels;
 
@@ -6,22 +8,34 @@ namespace Woola.PhotoManager.UI;
 
 public partial class MainWindow : Window
 {
-    private readonly MainViewModel   _vm;
-    private readonly AlbumRepository _albumRepository;
-    private readonly PhotoRepository _photoRepository;
-    private readonly StatsRepository _statsRepository;
+    private readonly MainViewModel       _vm;
+    private readonly AlbumRepository     _albumRepository;
+    private readonly PhotoRepository     _photoRepository;
+    private readonly StatsRepository     _statsRepository;
+    private readonly TagRepository       _tagRepository;
+    private readonly IAgentOrchestrator  _orchestrator;
+    private readonly ISettingsService    _settingsService;
+    private readonly IDuplicateDetectionService _duplicateService;
 
     public MainWindow(MainViewModel vm,
                       AlbumRepository albumRepository,
                       PhotoRepository photoRepository,
-                      StatsRepository statsRepository)
+                      StatsRepository statsRepository,
+                      TagRepository tagRepository,
+                      IAgentOrchestrator orchestrator,
+                      ISettingsService settingsService,
+                      IDuplicateDetectionService duplicateService)
     {
         InitializeComponent();
-        _vm              = vm;
-        _albumRepository = albumRepository;
-        _photoRepository = photoRepository;
-        _statsRepository = statsRepository;
-        DataContext      = vm;
+        _vm               = vm;
+        _albumRepository  = albumRepository;
+        _photoRepository  = photoRepository;
+        _statsRepository  = statsRepository;
+        _tagRepository    = tagRepository;
+        _orchestrator     = orchestrator;
+        _settingsService  = settingsService;
+        _duplicateService = duplicateService;
+        DataContext       = vm;
 
         vm.ErrorOccurred += (_, msg) =>
             System.Windows.MessageBox.Show(msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -29,7 +43,7 @@ public partial class MainWindow : Window
 
     private async void AlbumsBtn_Click(object sender, RoutedEventArgs e)
     {
-        new AlbumWindow(_albumRepository, _photoRepository) { Owner = this }.ShowDialog();
+        new AlbumWindow(_albumRepository, _photoRepository, _tagRepository) { Owner = this }.ShowDialog();
         await _vm.RefreshAlbumsAsync();
     }
 
@@ -61,6 +75,18 @@ public partial class MainWindow : Window
 
         new PresentationWindow(paths!) { Owner = this }.ShowDialog();
     }
+
+    // ── IMP-005: Duplicados ───────────────────────────────────────────────────
+
+    private void DuplicatesBtn_Click(object sender, RoutedEventArgs e)
+        => new DuplicatesWindow(_photoRepository) { Owner = this }.ShowDialog();
+
+    // ── IMP-010: Configuración ────────────────────────────────────────────────
+
+    private void SettingsBtn_Click(object sender, RoutedEventArgs e)
+        => new SettingsWindow(_orchestrator, _settingsService) { Owner = this }.ShowDialog();
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     private async void ReprocessTagsBtn_Click(object sender, RoutedEventArgs e)
     {

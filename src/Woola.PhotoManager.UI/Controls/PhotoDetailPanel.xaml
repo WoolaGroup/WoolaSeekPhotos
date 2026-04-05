@@ -151,6 +151,31 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
+                    <!-- IMP-009: Ver fotos similares -->
+                    <Button x:Name="SimilarPhotosBtn"
+                            Content="🔍 Ver fotos similares"
+                            Click="SimilarPhotosBtn_Click"
+                            Margin="0,8,0,0" Padding="10,6"
+                            Background="#1A2A1A" Foreground="#7BB8F0"
+                            BorderBrush="#2A4A2A" BorderThickness="1"
+                            FontSize="11" Cursor="Hand" HorizontalAlignment="Left">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#253525"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
                     <!-- ROSTROS -->
                     <TextBlock Text="ROSTROS" Style="{StaticResource SectionHeader}"/>
                     <TextBlock Text="{Binding FaceSummary}"
