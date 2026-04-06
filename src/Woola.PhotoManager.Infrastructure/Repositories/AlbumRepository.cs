@@ -87,6 +87,33 @@ public class AlbumRepository
         return await connection.QueryAsync<Photo>(sql, new { AlbumId = albumId });
     }
 
+    /// <summary>IMP-T3-004: Versión paginada con total para el filtro de álbum en MainViewModel.</summary>
+    public async Task<(List<Photo> Photos, int Total)> GetPhotosInAlbumPagedAsync(
+        int albumId, int limit, int offset)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+
+        var total = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM AlbumPhotos WHERE AlbumId = @AlbumId",
+            new { AlbumId = albumId });
+
+        const string sql = @"
+            SELECT p.Id, p.Path, p.Hash, p.FileSize, p.DateTaken, p.Width, p.Height,
+                   p.Latitude, p.Longitude, p.CameraModel, p.LensModel, p.Aperture, p.ShutterSpeed,
+                   p.Iso, p.FocalLength, p.Orientation, p.Status, p.ThumbnailPath,
+                   p.CreatedAt, p.LastIndexedAt
+            FROM AlbumPhotos ap
+            JOIN Photos p ON p.Id = ap.PhotoId
+            WHERE ap.AlbumId = @AlbumId
+            ORDER BY COALESCE(p.DateTaken, p.CreatedAt) DESC
+            LIMIT @Limit OFFSET @Offset";
+
+        var photos = (await connection.QueryAsync<Photo>(sql,
+            new { AlbumId = albumId, Limit = limit, Offset = offset })).ToList();
+
+        return (photos, total);
+    }
+
     /// <summary>Devuelve los IDs de fotos que pertenecen al álbum (útil para el AlbumWindow).</summary>
     public async Task<HashSet<int>> GetPhotoIdsInAlbumAsync(int albumId)
     {

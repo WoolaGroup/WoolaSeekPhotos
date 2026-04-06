@@ -28,7 +28,17 @@ public partial class MainViewModel : ObservableObject
     private int _currentOffset = 0;
     private int _totalCount    = 0;
 
-    public ObservableCollection<PhotoViewModel>  Photos       { get; } = new();
+    // IMP-T3-003: Debounce + cancellation for search
+    private CancellationTokenSource? _searchDebounce;
+    private CancellationTokenSource? _searchCts;
+
+    // IMP-T3-004: Filter pagination state
+    private int    _filterOffset      = 0;
+    private string _activeFilterType  = string.Empty;  // "album" | "tag" | ""
+    private Album? _activeAlbum;
+
+    // IMP-T3-002: RangeObservableCollection for batch UI updates
+    public RangeObservableCollection<PhotoViewModel> Photos { get; } = new();
     public ObservableCollection<Tag>             Tags         { get; } = new();
     public ObservableCollection<FilterChip>      ActiveFilters{ get; } = new();
     public ObservableCollection<EventViewModel>  Events       { get; } = new();  // G3
@@ -86,19 +96,36 @@ public partial class MainViewModel : ObservableObject
     private void UpdatePhotoState() =>
         HasNoPhotos = Photos.Count == 0 && !IsLoadingPhotos;
 
+    // IMP-T3-003: Debounce 300ms — cancela la query anterior al escribir
     partial void OnSearchTextChanged(string value)
     {
         if (IsHybridModeVisible) return;
-        if (string.IsNullOrEmpty(value))
+
+        // Cancelar el temporizador previo
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+        _searchDebounce = new CancellationTokenSource();
+
+        // Cancelar la query DB anterior inmediatamente
+        _searchCts?.Cancel();
+
+        var debounceCts = _searchDebounce;
+        _ = Task.Run(async () =>
         {
+            try { await Task.Delay(300, debounceCts.Token); }
+            catch (OperationCanceledException) { return; }  // nueva tecla llegó
+
+            // Reiniciar token de búsqueda
+            _searchCts?.Dispose();
+            _searchCts = new CancellationTokenSource();
+            var token  = _searchCts.Token;
+
             HasMorePhotos = false;
-            _ = LoadPhotosAsync(reset: true);
-        }
-        else
-        {
-            HasMorePhotos = false;
-            _ = FastSearchAsync(value);
-        }
+            if (string.IsNullOrEmpty(value))
+                await LoadPhotosAsync(reset: true);
+            else
+                await FastSearchAsync(value, token);
+        });
     }
 
     private async Task InitializeAsync()
@@ -114,38 +141,36 @@ public partial class MainViewModel : ObservableObject
     private async Task LoadPhotosAsync(bool reset = true)
     {
         IsLoadingPhotos = true;
+        _activeFilterType = string.Empty;  // IMP-T3-004: salir de modo filtro
         try
         {
             if (reset)
             {
                 _currentOffset = 0;
                 _totalCount    = await _photoRepository.GetTotalCountAsync();
-                System.Windows.Application.Current.Dispatcher.Invoke(() => Photos.Clear());
             }
 
-            var photos = await _photoRepository.GetPhotosAsync(limit: PageSize, offset: _currentOffset);
-            var sorted = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt).ToList();
+            // IMP-T3-006B: la DB ya devuelve ORDER BY COALESCE(DateTaken,CreatedAt) DESC
+            var photos = (await _photoRepository.GetPhotosAsync(limit: PageSize, offset: _currentOffset)).ToList();
 
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                foreach (var photo in sorted)
-                    Photos.Add(new PhotoViewModel(photo));
+                // IMP-T3-002: AddRange dispara 1 Reset en vez de N Add
+                if (reset) Photos.ReplaceAll(photos.Select(p => new PhotoViewModel(p)));
+                else       Photos.AddRange(photos.Select(p => new PhotoViewModel(p)));
 
-                _currentOffset += sorted.Count;
+                _currentOffset += photos.Count;
 
-                var isFiltered = _activeTagNames.Count > 0 || IsHybridModeVisible;
-                HasMorePhotos  = !isFiltered && sorted.Count >= PageSize;
-                PhotoCountText = _totalCount.ToString();
+                var isFiltered   = _activeTagNames.Count > 0 || IsHybridModeVisible;
+                HasMorePhotos    = !isFiltered && photos.Count >= PageSize;
+                PhotoCountText   = _totalCount.ToString();
                 PhotoCountStatus = isFiltered ? $"{Photos.Count} resultados" : $"{Photos.Count} fotos";
-                PageInfoText = _totalCount > 0 && !isFiltered
+                PageInfoText     = _totalCount > 0 && !isFiltered
                     ? $"Mostrando {Photos.Count} de {_totalCount}" : string.Empty;
 
-                if (reset)
-                    StatusText = isFiltered
-                        ? $"{Photos.Count} fotos filtradas"
-                        : $"{Photos.Count} de {_totalCount} fotos";
-                else
-                    StatusText = $"Cargadas {Photos.Count} de {_totalCount} fotos";
+                StatusText = reset
+                    ? (isFiltered ? $"{Photos.Count} fotos filtradas" : $"{Photos.Count} de {_totalCount} fotos")
+                    : $"Cargadas {Photos.Count} de {_totalCount} fotos";
             });
         }
         finally
@@ -159,7 +184,19 @@ public partial class MainViewModel : ObservableObject
     private async Task LoadMoreAsync()
     {
         if (!HasMorePhotos || IsLoadingPhotos) return;
-        await LoadPhotosAsync(reset: false);
+        // IMP-T3-004: enrutar al contexto activo de filtro
+        switch (_activeFilterType)
+        {
+            case "album" when _activeAlbum != null:
+                await LoadAlbumPageAsync(_activeAlbum, reset: false);
+                break;
+            case "tag" when _activeTagNames.Count > 0:
+                await LoadTagPageAsync(reset: false);
+                break;
+            default:
+                await LoadPhotosAsync(reset: false);
+                break;
+        }
     }
 
     // ── Tags ──────────────────────────────────────────────────────────────────
@@ -196,27 +233,55 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Llama MainWindow después de cerrar AlbumWindow para refrescar.</summary>
     public async Task RefreshAlbumsAsync() => await LoadSidebarAlbumsAsync();
 
+    // IMP-T3-004: Paginación en filtro de álbum
     [RelayCommand]
     private async Task FilterByAlbumAsync(Album album)
     {
         IsHybridModeVisible = false;
         _activeTagNames.Clear();
+        _activeFilterType   = "album";
+        _activeAlbum        = album;
+        _filterOffset       = 0;
+        await LoadAlbumPageAsync(album, reset: true);
+    }
 
-        var photos = await _albumRepository.GetPhotosInAlbumAsync(album.Id);
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+    private async Task LoadAlbumPageAsync(Album album, bool reset)
+    {
+        IsLoadingPhotos = true;
+        try
         {
-            Photos.Clear();
-            foreach (var p in photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt))
-                Photos.Add(new PhotoViewModel(p));
+            var (photos, total) = await _albumRepository.GetPhotosInAlbumPagedAsync(
+                album.Id, limit: PageSize, offset: _filterOffset);
 
-            HasMorePhotos    = false;
-            PhotoCountStatus = $"{Photos.Count} fotos";
-            StatusText       = $"📁 {album.Name} – {Photos.Count} fotos";
-            PageInfoText     = string.Empty;
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                var vms = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt)
+                                .Select(p => new PhotoViewModel(p));
 
-            ActiveFilters.Clear();
-            ActiveFilters.Add(new FilterChip($"📁 {album.Name}", () => _ = FilterAllAsync()));
-        });
+                // IMP-T3-002: batch update
+                if (reset) Photos.ReplaceAll(vms);
+                else        Photos.AddRange(vms);
+
+                _filterOffset   += photos.Count;
+                HasMorePhotos    = photos.Count >= PageSize;
+                PhotoCountStatus = $"{Photos.Count} fotos";
+                PageInfoText     = total > 0 ? $"Mostrando {Photos.Count} de {total}" : string.Empty;
+                StatusText       = reset
+                    ? $"📁 {album.Name} – {Photos.Count} de {total} fotos"
+                    : $"📁 {album.Name} – cargadas {Photos.Count} de {total} fotos";
+
+                if (reset)
+                {
+                    ActiveFilters.Clear();
+                    ActiveFilters.Add(new FilterChip($"📁 {album.Name}", () => _ = FilterAllAsync()));
+                }
+            });
+        }
+        finally
+        {
+            IsLoadingPhotos = false;
+            UpdatePhotoState();
+        }
     }
 
     // ── G3: Events sidebar ────────────────────────────────────────────────────
@@ -247,9 +312,10 @@ public partial class MainViewModel : ObservableObject
         var photos = await _photoRepository.GetPhotosByDateRangeAsync(ev.Event.Start, ev.Event.End);
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
-            Photos.Clear();
-            foreach (var p in photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt))
-                Photos.Add(new PhotoViewModel(p));
+            // IMP-T3-002: ReplaceAll
+            var sorted = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt)
+                               .Select(p => new PhotoViewModel(p));
+            Photos.ReplaceAll(sorted);
 
             HasMorePhotos    = false;
             PhotoCountStatus = $"{Photos.Count} fotos";
@@ -263,16 +329,24 @@ public partial class MainViewModel : ObservableObject
 
     // ── Search ────────────────────────────────────────────────────────────────
 
-    private async Task FastSearchAsync(string query)
+    // IMP-T3-003: CancellationToken para poder cancelar si otra tecla llega
+    private async Task FastSearchAsync(string query, CancellationToken ct = default)
     {
-        var photos = await _photoRepository.SearchCandidatesAsync(query, limit: 200);
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        try
         {
-            Photos.Clear();
-            foreach (var photo in photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt))
-                Photos.Add(new PhotoViewModel(photo));
-            PhotoCountStatus = $"{Photos.Count} resultados";
-        });
+            var photos = await _photoRepository.SearchCandidatesAsync(query, limit: 200, cancellationToken: ct);
+            ct.ThrowIfCancellationRequested();
+
+            // IMP-T3-002: ReplaceAll — un único Reset en vez de N Add
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                var sorted = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt)
+                                   .Select(p => new PhotoViewModel(p));
+                Photos.ReplaceAll(sorted);
+                PhotoCountStatus = $"{Photos.Count} resultados";
+            });
+        }
+        catch (OperationCanceledException) { /* búsqueda supersedida — no actualizar UI */ }
     }
 
     private void OnIndexingProgress(object? sender, IndexingProgress e)
@@ -299,14 +373,14 @@ public partial class MainViewModel : ObservableObject
             var results = await _hybridSearchService.SearchAsync(query, limit: 200);
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                Photos.Clear();
-                foreach (var r in results) Photos.Add(new PhotoViewModel(r.Photo));
+                // IMP-T3-002: ReplaceAll — 1 Reset en lugar de N Add
+                Photos.ReplaceAll(results.Select(r => new PhotoViewModel(r.Photo)));
 
-                var exactCount     = results.Count(r => r.ExactMatches > 0);
+                var exactCount      = results.Count(r => r.ExactMatches > 0);
                 IsHybridModeVisible = true;
-                HybridModeLabel    = $"Búsqueda híbrida: '{query}' – {results.Count} resultados ({exactCount} exactos)";
-                PhotoCountStatus   = $"{results.Count} resultados híbridos";
-                StatusText         = $"🔍 Híbrida: {results.Count} resultados";
+                HybridModeLabel     = $"Búsqueda híbrida: '{query}' – {results.Count} resultados ({exactCount} exactos)";
+                PhotoCountStatus    = $"{results.Count} resultados híbridos";
+                StatusText          = $"🔍 Híbrida: {results.Count} resultados";
             });
         }
         catch (Exception ex)
@@ -321,10 +395,13 @@ public partial class MainViewModel : ObservableObject
     private void ClearSearch()
     {
         IsHybridModeVisible = false;
-        SearchText = string.Empty;
-        StatusText = "Búsqueda cancelada";
+        _activeFilterType   = string.Empty;  // IMP-T3-004
+        _activeAlbum        = null;
+        SearchText          = string.Empty;
+        StatusText          = "Búsqueda cancelada";
         ActiveFilters.Clear();
         _activeTagNames.Clear();
+        _searchCts?.Cancel();  // IMP-T3-003: cancelar query en vuelo
         _ = LoadPhotosAsync(reset: true);
     }
 
@@ -334,6 +411,8 @@ public partial class MainViewModel : ObservableObject
         IsHybridModeVisible = false;
         _activeTagNames.Clear();
         ActiveFilters.Clear();
+        _activeFilterType = string.Empty;  // IMP-T3-004
+        _activeAlbum      = null;
         await LoadPhotosAsync(reset: true);
     }
 
@@ -347,8 +426,8 @@ public partial class MainViewModel : ObservableObject
 
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
-            Photos.Clear();
-            foreach (var photo in recent) Photos.Add(new PhotoViewModel(photo));
+            // IMP-T3-002: ReplaceAll
+            Photos.ReplaceAll(recent.Select(p => new PhotoViewModel(p)));
             PhotoCountStatus = $"{Photos.Count} fotos (últimos 30 días)";
             StatusText       = $"Filtrado: últimos 30 días – {Photos.Count} fotos";
 
@@ -361,6 +440,7 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
+    // IMP-T3-004: Paginación en filtro de tag
     [RelayCommand]
     private async Task FilterByTagAsync(string tagName)
     {
@@ -372,27 +452,52 @@ public partial class MainViewModel : ObservableObject
 
         if (_activeTagNames.Count == 0) { await FilterAllAsync(); return; }
 
+        _activeFilterType = "tag";
+        _filterOffset     = 0;
+        await LoadTagPageAsync(reset: true);
+    }
+
+    private async Task LoadTagPageAsync(bool reset)
+    {
+        IsLoadingPhotos = true;
         try
         {
-            var photos = await _tagRepository.GetPhotosByTagsAsync(_activeTagNames);
+            var (photos, total) = await _tagRepository.GetPhotosByTagsPagedAsync(
+                _activeTagNames, limit: PageSize, offset: _filterOffset);
+
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                Photos.Clear();
-                foreach (var photo in photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt))
-                    Photos.Add(new PhotoViewModel(photo));
+                var vms = photos.OrderByDescending(p => p.DateTaken ?? p.CreatedAt)
+                                .Select(p => new PhotoViewModel(p));
 
+                // IMP-T3-002: batch update
+                if (reset) Photos.ReplaceAll(vms);
+                else        Photos.AddRange(vms);
+
+                _filterOffset   += photos.Count;
+                HasMorePhotos    = photos.Count >= PageSize;
+                var tagList      = string.Join(" + ", _activeTagNames);
                 PhotoCountStatus = $"{Photos.Count} fotos";
-                StatusText       = $"Filtro AND: {string.Join(" + ", _activeTagNames)} – {Photos.Count} fotos";
+                PageInfoText     = total > 0 ? $"Mostrando {Photos.Count} de {total}" : string.Empty;
+                StatusText       = $"Filtro AND: {tagList} – {Photos.Count} de {total} fotos";
 
-                ActiveFilters.Clear();
-                foreach (var tag in _activeTagNames.ToList())
+                if (reset)
                 {
-                    var t = tag;
-                    ActiveFilters.Add(new FilterChip($"🏷️ {t}", () => _ = FilterByTagAsync(t)));
+                    ActiveFilters.Clear();
+                    foreach (var tag in _activeTagNames.ToList())
+                    {
+                        var t = tag;
+                        ActiveFilters.Add(new FilterChip($"🏷️ {t}", () => _ = FilterByTagAsync(t)));
+                    }
                 }
             });
         }
         catch (Exception ex) { StatusText = $"Error: {ex.Message}"; }
+        finally
+        {
+            IsLoadingPhotos = false;
+            UpdatePhotoState();
+        }
     }
 
     // ── Photo detail ──────────────────────────────────────────────────────────
@@ -442,6 +547,14 @@ public partial class MainViewModel : ObservableObject
         StatusText = "Deteniendo...";
     }
     private bool IsIndexingCanExecute() => IsIndexing;
+
+    // IMP-T3-003: Liberar CancellationTokenSources al cerrar
+    public void Dispose()
+    {
+        _searchDebounce?.Dispose();
+        _searchCts?.Dispose();
+        _indexingCts?.Dispose();
+    }
 
     [RelayCommand]
     private async Task ReprocessTagsAsync()

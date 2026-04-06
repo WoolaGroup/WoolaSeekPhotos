@@ -58,7 +58,7 @@ public class PhotoRepository
                    Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation,
                    Status, ThumbnailPath, CreatedAt, LastIndexedAt
             FROM Photos
-            ORDER BY Id DESC
+            ORDER BY COALESCE(DateTaken, CreatedAt) DESC
             LIMIT @Limit OFFSET @Offset
         ";
 
@@ -114,7 +114,9 @@ public class PhotoRepository
         return await connection.QueryAsync<Photo>(sql, new { SearchTerm = searchTerm, Limit = limit });
     }
 
-    public async Task<List<Photo>> SearchCandidatesAsync(string query, int limit = 500)
+    // IMP-T3-003: CancellationToken para poder cancelar queries supersedidas
+    public async Task<List<Photo>> SearchCandidatesAsync(
+        string query, int limit = 500, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
         var likeQuery = $"%{query}%";
@@ -132,7 +134,9 @@ public class PhotoRepository
             )
             ORDER BY COALESCE(DateTaken, CreatedAt) DESC
             LIMIT @Limit";
-        return (await connection.QueryAsync<Photo>(sql, new { Query = likeQuery, Limit = limit })).ToList();
+        return (await connection.QueryAsync<Photo>(
+            new CommandDefinition(sql, new { Query = likeQuery, Limit = limit },
+                cancellationToken: cancellationToken))).ToList();
     }
 
     public async Task UpdatePhotoStatusAsync(int id, string status)

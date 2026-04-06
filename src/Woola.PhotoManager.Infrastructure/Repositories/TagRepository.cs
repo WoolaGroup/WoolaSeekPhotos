@@ -130,6 +130,45 @@ public class TagRepository
             new { Names = names, TagCount = names.Count, Limit = limit });
     }
 
+    /// <summary>IMP-T3-004: Versión paginada con total para el filtro de tags en MainViewModel.</summary>
+    public async Task<(List<Photo> Photos, int Total)> GetPhotosByTagsPagedAsync(
+        IEnumerable<string> tagNames, int limit, int offset)
+    {
+        var names = tagNames.Select(n => n.ToLowerInvariant()).ToList();
+        if (names.Count == 0) return ([], 0);
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        const string countSql = @"
+            SELECT COUNT(*) FROM Photos
+            WHERE (
+                SELECT COUNT(DISTINCT t.Name)
+                FROM PhotoTags pt JOIN Tags t ON t.Id = pt.TagId
+                WHERE pt.PhotoId = Photos.Id AND t.Name IN @Names
+            ) = @TagCount";
+
+        var total = await connection.ExecuteScalarAsync<int>(
+            countSql, new { Names = names, TagCount = names.Count });
+
+        const string sql = @"
+            SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height,
+                   Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed,
+                   Iso, FocalLength, Orientation, Status, ThumbnailPath, CreatedAt, LastIndexedAt
+            FROM Photos
+            WHERE (
+                SELECT COUNT(DISTINCT t.Name)
+                FROM PhotoTags pt JOIN Tags t ON t.Id = pt.TagId
+                WHERE pt.PhotoId = Photos.Id AND t.Name IN @Names
+            ) = @TagCount
+            ORDER BY COALESCE(DateTaken, CreatedAt) DESC
+            LIMIT @Limit OFFSET @Offset";
+
+        var photos = (await connection.QueryAsync<Photo>(sql,
+            new { Names = names, TagCount = names.Count, Limit = limit, Offset = offset })).ToList();
+
+        return (photos, total);
+    }
+
     public async Task<IEnumerable<Photo>> GetPhotosByTagAsync(string tagName, int limit = 100)
     {
         using var connection = _connectionFactory.CreateConnection();

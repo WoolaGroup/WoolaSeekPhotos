@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Woola.PhotoManager.Common.Services;
 using Woola.PhotoManager.Core.Agents;
@@ -68,55 +70,131 @@ public class PhotoIndexer : IPhotoIndexer
         return Task.CompletedTask;
     }
 
+    // IMP-T3-005: Streaming discovery + parallel hashing via Channel pipeline
     private async Task IndexDirectoryAsync(string directory, CancellationToken cancellationToken)
     {
-        var allFiles = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories)
-            .Where(f => SupportedExtensions.Contains(Path.GetExtension(f)))
-            .ToList();
+        _logger.LogInformation("[Indexer] Iniciando streaming en '{Dir}'", directory);
 
-        var progress  = new IndexingProgress { TotalFound = allFiles.Count };
-        var processed = 0;
-        var batch     = new List<Photo>();
-
-        _logger.LogInformation("[Indexer] Iniciando: {Total} archivos en '{Dir}'",
-            allFiles.Count, directory);
+        // Progreso inicial inmediato, antes de encontrar el primer archivo
+        var progress = new IndexingProgress { TotalFound = 0, Processed = 0, CurrentFile = "Descubriendo archivos..." };
         OnProgressChanged(progress);
 
-        foreach (var filePath in allFiles)
-        {
-            if (cancellationToken.IsCancellationRequested) break;
+        // EnumerateFiles: streaming — no bloquea hasta listar todo
+        var fileStream = Directory.EnumerateFiles(directory, "*.*", SearchOption.AllDirectories)
+            .Where(f => SupportedExtensions.Contains(Path.GetExtension(f)));
 
+        // Canal productor→consumidor con backpressure (max 200 en vuelo)
+        var channel = Channel.CreateBounded<string>(new BoundedChannelOptions(200)
+        {
+            FullMode     = BoundedChannelFullMode.Wait,
+            SingleWriter = true,
+            SingleReader = false
+        });
+
+        int discovered = 0;
+        int processed  = 0;
+
+        // Productor: enumera archivos y los escribe en el canal
+        var producer = Task.Run(async () =>
+        {
             try
             {
-                var hash = ComputeHash(filePath);
-                if (await _photoRepository.PhotoExistsAsync(hash)) continue;
-
-                var photo = await CreatePhotoFromFileAsync(filePath, hash);
-                batch.Add(photo);
-
-                if (batch.Count >= 100)
+                foreach (var filePath in fileStream)
                 {
-                    await SaveBatchAsync(batch, cancellationToken);
-                    batch.Clear();
+                    if (cancellationToken.IsCancellationRequested) break;
+                    Interlocked.Increment(ref discovered);
+                    await channel.Writer.WriteAsync(filePath, cancellationToken);
                 }
-
-                processed++;
-                progress.Processed   = processed;
-                progress.CurrentFile = Path.GetFileName(filePath);
-                OnProgressChanged(progress);
             }
-            catch (Exception ex)
+            finally { channel.Writer.Complete(); }
+        }, cancellationToken);
+
+        // SemaphoreSlim(8): SHA256 es CPU-bound, más paralelismo que el I/O de thumbnails
+        using var hashSem = new SemaphoreSlim(8, 8);
+        var pendingBatch  = new ConcurrentBag<Photo>();
+        var batchLock     = new SemaphoreSlim(1, 1);
+        var pendingTasks  = new List<Task>();
+
+        // Consumidor: lee del canal y procesa archivos en paralelo
+        var consumer = Task.Run(async () =>
+        {
+            await foreach (var filePath in channel.Reader.ReadAllAsync(cancellationToken))
             {
-                _logger.LogDebug("[Indexer] Skipped '{File}': {Msg}", filePath, ex.Message);
-                processed++;
+                var localPath = filePath;
+                var task = Task.Run(async () =>
+                {
+                    await hashSem.WaitAsync(cancellationToken);
+                    try
+                    {
+                        var hash = ComputeHash(localPath);
+                        if (await _photoRepository.PhotoExistsAsync(hash))
+                        {
+                            Interlocked.Increment(ref processed);
+                            return;
+                        }
+
+                        var photo = await CreatePhotoFromFileAsync(localPath, hash);
+
+                        // Acumular en batch thread-safe; vaciar si llega a 100
+                        List<Photo>? batchToSave = null;
+                        await batchLock.WaitAsync(cancellationToken);
+                        try
+                        {
+                            pendingBatch.Add(photo);
+                            if (pendingBatch.Count >= 100)
+                                batchToSave = DrainBatch(pendingBatch);
+                        }
+                        finally { batchLock.Release(); }
+
+                        if (batchToSave != null)
+                            await SaveBatchAsync(batchToSave, cancellationToken);
+
+                        Interlocked.Increment(ref processed);
+
+                        // Emitir progreso desde el primer archivo (no al final)
+                        progress.TotalFound  = Volatile.Read(ref discovered);
+                        progress.Processed   = Volatile.Read(ref processed);
+                        progress.CurrentFile = Path.GetFileName(localPath);
+                        OnProgressChanged(progress);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug("[Indexer] Skipped '{File}': {Msg}", localPath, ex.Message);
+                        Interlocked.Increment(ref processed);
+                    }
+                    finally { hashSem.Release(); }
+                }, cancellationToken);
+
+                pendingTasks.Add(task);
+
+                // Evitar acumulación ilimitada de tareas
+                if (pendingTasks.Count >= 32)
+                {
+                    await Task.WhenAny(pendingTasks);
+                    pendingTasks.RemoveAll(t => t.IsCompleted);
+                }
             }
-        }
 
-        if (batch.Count > 0)
-            await SaveBatchAsync(batch, cancellationToken);
+            await Task.WhenAll(pendingTasks);
+        }, cancellationToken);
 
-        _logger.LogInformation("[Indexer] Completado: {Processed}/{Total} fotos indexadas",
-            processed, allFiles.Count);
+        await Task.WhenAll(producer, consumer);
+
+        // Vaciar el batch residual
+        var remaining = DrainBatch(pendingBatch);
+        if (remaining.Count > 0)
+            await SaveBatchAsync(remaining, cancellationToken);
+
+        _logger.LogInformation("[Indexer] Completado: {Processed}/{Total} fotos",
+            processed, discovered);
+    }
+
+    private static List<Photo> DrainBatch(ConcurrentBag<Photo> bag)
+    {
+        var result = new List<Photo>();
+        while (bag.TryTake(out var item))
+            result.Add(item);
+        return result;
     }
 
     private async Task SaveBatchAsync(List<Photo> batch, CancellationToken cancellationToken)

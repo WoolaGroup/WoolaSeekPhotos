@@ -28,9 +28,15 @@ public class SqliteConnectionFactory
         using var connection = new SqliteConnection(_connectionString);
         connection.Open();
 
-        // WAL mode: concurrent reads during writes + higher throughput for parallel indexing
-        using var walCmd = new SqliteCommand(
-            "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", connection);
+        // WAL mode + memory tuning (IMP-T3-006)
+        using var walCmd = new SqliteCommand(@"
+            PRAGMA journal_mode  = WAL;
+            PRAGMA synchronous   = NORMAL;
+            PRAGMA cache_size    = -32000;
+            PRAGMA temp_store    = MEMORY;
+            PRAGMA mmap_size     = 268435456;
+            PRAGMA foreign_keys  = ON;
+        ", connection);
         walCmd.ExecuteNonQuery();
 
         var sql = @"
@@ -137,6 +143,10 @@ public class SqliteConnectionFactory
         );
 
         CREATE INDEX IF NOT EXISTS idx_albumphotos_album ON AlbumPhotos(AlbumId);
+
+        -- IMP-T3-006B: índice para ORDER BY COALESCE(DateTaken, CreatedAt) DESC
+        CREATE INDEX IF NOT EXISTS idx_photos_sort
+            ON Photos(COALESCE(DateTaken, CreatedAt) DESC);
     ";
 
         using var command = new SqliteCommand(sql, connection);

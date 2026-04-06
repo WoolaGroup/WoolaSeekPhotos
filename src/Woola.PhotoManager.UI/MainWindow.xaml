@@ -24,6 +24,7 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <conv:InverseBoolConverter x:Key="InvBool"/>
         <conv:NullToVisibilityConverter x:Key="NullToVis"/>
+        <conv:BitmapImageConverter x:Key="BitmapImageConv"/>
 
         <!-- Botón primario -->
         <Style TargetType="Button">
@@ -426,68 +427,86 @@
 
             <!-- Grid de fotos + loading overlay + empty state -->
             <Grid Grid.Row="3">
-                <!-- Fotos -->
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel>
-                        <ItemsControl ItemsSource="{Binding Photos}"
-                                      VirtualizingStackPanel.IsVirtualizing="True">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel Margin="15"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Command="{Binding DataContext.SelectPhotoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}"
-                                            Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                                        <Border Style="{StaticResource PhotoCard}" Width="220">
-                                            <StackPanel>
-                                                <Border Height="180" CornerRadius="8,8,0,0" Background="#1A1A1A">
-                                                    <Image Source="{Binding ThumbnailPath}"
-                                                           Stretch="Uniform"
-                                                           VerticalAlignment="Center"/>
-                                                </Border>
-                                                <StackPanel Margin="12,10,12,12">
-                                                    <TextBlock Text="{Binding FileName}"
-                                                               FontSize="12"
-                                                               Foreground="{StaticResource TextPrimary}"
-                                                               TextWrapping="Wrap"
-                                                               MaxHeight="35"/>
-                                                    <TextBlock Text="{Binding DateTaken, StringFormat='dd/MM/yyyy'}"
-                                                               FontSize="10"
-                                                               Foreground="{StaticResource TextSecondary}"
-                                                               Margin="0,5,0,0"/>
-                                                    <TextBlock Text="{Binding CameraModel}"
-                                                               FontSize="9"
-                                                               Foreground="{StaticResource TextMuted}"
-                                                               Margin="0,3,0,0"/>
-                                                </StackPanel>
-                                            </StackPanel>
+                <!-- IMP-T3-001: VirtualizingWrapPanel — solo renderiza los elementos visibles -->
+                <!-- CanContentScroll="True" es esencial: delega scroll a IScrollInfo del panel -->
+                <ItemsControl ItemsSource="{Binding Photos}"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.CanContentScroll="True"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <controls:VirtualizingWrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.Template>
+                        <ControlTemplate TargetType="ItemsControl">
+                            <ScrollViewer CanContentScroll="True"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ItemsPresenter/>
+                            </ScrollViewer>
+                        </ControlTemplate>
+                    </ItemsControl.Template>
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="Width" Value="220"/>
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Command="{Binding DataContext.SelectPhotoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}"
+                                    Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand"
+                                    Width="220" Margin="8">
+                                <Border Style="{StaticResource PhotoCard}" Width="220">
+                                    <StackPanel>
+                                        <Border Height="180" CornerRadius="8,8,0,0" Background="#1A1A1A">
+                                            <!-- IMP-T3-006C: BitmapImageConverter libera file handle y permite GC -->
+                                            <Image Source="{Binding ThumbnailPath,
+                                                       Converter={StaticResource BitmapImageConv}}"
+                                                   Stretch="Uniform"
+                                                   VerticalAlignment="Center"/>
                                         </Border>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                                        <StackPanel Margin="12,10,12,12">
+                                            <TextBlock Text="{Binding FileName}"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource TextPrimary}"
+                                                       TextWrapping="Wrap"
+                                                       MaxHeight="35"/>
+                                            <TextBlock Text="{Binding DateTaken, StringFormat='dd/MM/yyyy'}"
+                                                       FontSize="10"
+                                                       Foreground="{StaticResource TextSecondary}"
+                                                       Margin="0,5,0,0"/>
+                                            <TextBlock Text="{Binding CameraModel}"
+                                                       FontSize="9"
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       Margin="0,3,0,0"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
-                        <!-- F2: Cargar más -->
-                        <Button Command="{Binding LoadMoreCommand}"
-                                Visibility="{Binding HasMorePhotos, Converter={StaticResource BoolToVis}}"
-                                HorizontalAlignment="Center"
-                                Margin="0,8,0,24"
-                                Padding="24,12"
-                                Background="#252525"
-                                Foreground="#AAAAAA"
-                                FontSize="13">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="📥" Margin="0,0,8,0"/>
-                                <TextBlock Text="{Binding PageInfoText}"/>
-                                <TextBlock Text=" — Cargar más" Foreground="#666666"/>
-                            </StackPanel>
-                        </Button>
+                <!-- F2: Cargar más — fuera del ItemsControl, pegado al fondo del Grid -->
+                <Button Command="{Binding LoadMoreCommand}"
+                        Visibility="{Binding HasMorePhotos, Converter={StaticResource BoolToVis}}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,0,8"
+                        Padding="24,12"
+                        Background="#252525"
+                        Foreground="#AAAAAA"
+                        FontSize="13">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="📥" Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding PageInfoText}"/>
+                        <TextBlock Text=" — Cargar más" Foreground="#666666"/>
                     </StackPanel>
-                </ScrollViewer>
+                </Button>
 
                 <!-- Loading overlay -->
                 <Border Visibility="{Binding IsLoadingPhotos, Converter={StaticResource BoolToVis}}"
