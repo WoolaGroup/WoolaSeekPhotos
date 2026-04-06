@@ -3,438 +3,576 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:Woola.PhotoManager.UI.Converters"
         xmlns:controls="clr-namespace:Woola.PhotoManager.UI.Controls"
-        Title="Woola Smart Photo Manager"
-        Height="900" Width="1400"
+        Title="Woola Photos"
+        Height="900" Width="1440"
+        MinHeight="680" MinWidth="1024"
         WindowStartupLocation="CenterScreen"
-        Background="#0F0F0F"
-        FontFamily="Segoe UI">
+        Background="{StaticResource BrushBgDeep}"
+        FontFamily="Segoe UI Variable Display, Segoe UI">
 
     <Window.Resources>
-        <!-- Colores -->
-        <SolidColorBrush x:Key="PrimaryColor" Color="#0078D4"/>
-        <SolidColorBrush x:Key="DarkBg" Color="#0F0F0F"/>
-        <SolidColorBrush x:Key="PanelBg" Color="#1A1A1A"/>
-        <SolidColorBrush x:Key="CardBg" Color="#252525"/>
-        <SolidColorBrush x:Key="BorderColor" Color="#333333"/>
-        <SolidColorBrush x:Key="TextPrimary" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#888888"/>
-        <SolidColorBrush x:Key="TextMuted" Color="#555555"/>
-
         <!-- Converters -->
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-        <conv:InverseBoolConverter x:Key="InvBool"/>
+        <conv:InverseBoolConverter    x:Key="InvBool"/>
         <conv:NullToVisibilityConverter x:Key="NullToVis"/>
-        <conv:BitmapImageConverter x:Key="BitmapImageConv"/>
+        <conv:BitmapImageConverter    x:Key="BitmapImageConv"/>
 
-        <!-- Botón primario -->
-        <Style TargetType="Button">
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="6"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#005A9E"/>
-                </Trigger>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#333333"/>
-                    <Setter Property="Foreground" Value="#666666"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <!-- Botón secundario -->
-        <Style x:Key="SecondaryButton" TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{StaticResource BorderColor}"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#2A2A2A"/>
-                    <Setter Property="Foreground" Value="White"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <!-- Tarjeta de foto -->
-        <Style TargetType="Border" x:Key="PhotoCard">
-            <Setter Property="Background" Value="{StaticResource CardBg}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderColor}"/>
+        <!-- Tarjeta de foto — rediseñada -->
+        <Style x:Key="PhotoCard" TargetType="Border">
+            <Setter Property="Background"      Value="{StaticResource BrushBgCard}"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource BrushBorderSubtle}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Margin" Value="6"/>
-            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="CornerRadius"    Value="8"/>
+            <Setter Property="Cursor"          Value="Hand"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#2D2D2D"/>
-                    <Setter Property="BorderBrush" Value="{StaticResource PrimaryColor}"/>
+                    <Setter Property="Background"  Value="{StaticResource BrushBgCardHover}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
                 </Trigger>
             </Style.Triggers>
+        </Style>
+
+        <!-- Fila de lista de foto -->
+        <Style x:Key="PhotoListRow" TargetType="Border">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor"     Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource BrushBgCard}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Tag chip pequeño (sidebar + panel) -->
+        <Style x:Key="TagChipSmall" TargetType="Border">
+            <Setter Property="Background"      Value="{StaticResource BrushBgSelected}"/>
+            <Setter Property="CornerRadius"    Value="4"/>
+            <Setter Property="Padding"         Value="8,4"/>
+            <Setter Property="Margin"          Value="0,0,5,5"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+        </Style>
+
+        <!-- Chip de filtro activo -->
+        <Style x:Key="FilterChipStyle" TargetType="Border">
+            <Setter Property="Background"      Value="{StaticResource BrushAccentFaint}"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource BrushBorderDefault}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="5"/>
+            <Setter Property="Padding"         Value="10,5"/>
+            <Setter Property="Margin"          Value="0,0,6,0"/>
         </Style>
     </Window.Resources>
 
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="280"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="52"/>    <!-- ROW 0: Top Nav Bar -->
+            <RowDefinition Height="48"/>    <!-- ROW 1: Toolbar (search + sort + toggle) -->
+            <RowDefinition Height="Auto"/>  <!-- ROW 2: Filter chips (colapsa si no hay) -->
+            <RowDefinition Height="*"/>     <!-- ROW 3: Content (left panel + main area) -->
+            <RowDefinition Height="30"/>    <!-- ROW 4: Status bar -->
+        </Grid.RowDefinitions>
 
-        <!-- SIDEBAR IZQUIERDO -->
-        <Border Grid.Column="0" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderColor}" BorderThickness="0,0,1,0">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Margin="20">
-                    <!-- Logo -->
-                    <Border Height="60" Margin="0,20,0,30">
-                        <TextBlock Text="📸 Woola" FontSize="22" FontWeight="Bold"
-                                   Foreground="{StaticResource PrimaryColor}"
-                                   VerticalAlignment="Center"/>
-                    </Border>
+        <!-- ═══════════════════════════════════════════════════════════
+             ROW 0 — TOP NAV BAR
+        ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="0"
+                Background="{StaticResource BrushBgSurface}"
+                BorderBrush="{StaticResource BrushBorderSubtle}"
+                BorderThickness="0,0,0,1">
+            <Grid>
+                <!-- Logo — izquierda -->
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Margin="20,0">
+                    <TextBlock Text="Woola"
+                               FontSize="15" FontWeight="Bold"
+                               Foreground="{StaticResource BrushAccent}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text=" Photos"
+                               FontSize="15"
+                               Foreground="{StaticResource BrushTextMuted}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
 
-                    <!-- Botones principales -->
-                    <Button x:Name="SelectFolderBtn"
+                <!-- Tabs de navegación — centro -->
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Stretch">
+                    <Button x:Name="TabBiblioteca"
+                            Style="{StaticResource NavTabButton}"
+                            Content="BIBLIOTECA"
+                            Click="TabBiblioteca_Click"/>
+                    <Button x:Name="TabAlbumes"
+                            Style="{StaticResource NavTabButton}"
+                            Content="ÁLBUMES"
+                            Click="TabAlbumes_Click"/>
+                    <Button x:Name="TabRostros"
+                            Style="{StaticResource NavTabButton}"
+                            Content="ROSTROS"
+                            Click="TabRostros_Click"/>
+                    <Button x:Name="TabDiscover"
+                            Style="{StaticResource NavTabButton}"
+                            Content="DISCOVER"
+                            Click="TabDiscover_Click"/>
+                </StackPanel>
+
+                <!-- Botones de utilidad — derecha -->
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="16,0">
+                    <Button x:Name="IndexBtn"
+                            Style="{StaticResource PrimaryButton}"
+                            Content="+ Indexar"
                             Command="{Binding StartIndexingCommand}"
                             IsEnabled="{Binding IsIndexing, Converter={StaticResource InvBool}}"
-                            Background="{StaticResource PrimaryColor}" Margin="0,5">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📁" FontSize="16" Margin="0,0,10,0"/>
-                            <TextBlock Text="Seleccionar Carpeta"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="ReprocessTagsBtn" Click="ReprocessTagsBtn_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,5">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🏷️" FontSize="16" Margin="0,0,10,0"/>
-                            <TextBlock Text="Reprocesar Tags"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="StopBtn"
-                            Command="{Binding StopIndexingCommand}"
-                            IsEnabled="{Binding IsIndexing}"
-                            Style="{StaticResource SecondaryButton}" Margin="0,5">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⏹️" FontSize="16" Margin="0,0,10,0"/>
-                            <TextBlock Text="Detener Indexación"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="PresentationBtn" Click="PresentationBtn_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,5">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🎬" FontSize="16" Margin="0,0,10,0"/>
-                            <TextBlock Text="Modo Presentación"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="TestVisionBtn" Click="TestVisionBtn_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,5">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="👁️" FontSize="16" Margin="0,0,10,0"/>
-                            <TextBlock Text="Probar VisionAgent"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="TestOcrBtn" Click="TestOcrBtn_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,5">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📝" FontSize="16" Margin="0,0,10,0"/>
-                            <TextBlock Text="Probar OCR Agent"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="FaceManagementBtn" Click="FaceManagementBtn_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,5">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="👤" FontSize="16" Margin="0,0,10,0"/>
-                            <TextBlock Text="Gestionar Rostros"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
-
-                    <!-- Total Fotos -->
-                    <Border Background="{StaticResource CardBg}" CornerRadius="8" Padding="12" Margin="0,5">
-                        <StackPanel>
-                            <TextBlock Text="📸 Total Fotos" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
-                            <TextBlock Text="{Binding PhotoCountText}" FontSize="24"
-                                       FontWeight="Bold" Foreground="{StaticResource PrimaryColor}"/>
-                        </StackPanel>
-                    </Border>
-
-                    <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
-
-                    <!-- Tags populares -->
-                    <TextBlock Text="TAGS POPULARES" FontSize="11"
-                               Foreground="{StaticResource TextMuted}"
-                               Margin="0,0,0,10"/>
-
-                    <ItemsControl ItemsSource="{Binding Tags}" Margin="0,0,0,10">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Content="{Binding Name}"
-                                        Style="{StaticResource SecondaryButton}"
-                                        Margin="0,0,8,8"
-                                        Padding="10,5"
-                                        FontSize="11"
-                                        Command="{Binding DataContext.FilterByTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding Name}"/>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
-
-                    <!-- Filtros rápidos -->
-                    <TextBlock Text="FILTROS RÁPIDOS" FontSize="11"
-                               Foreground="{StaticResource TextMuted}"
-                               Margin="0,0,0,10"/>
-
-                    <Button Content="📷 Todas las fotos"
-                            Command="{Binding FilterAllCommand}"
-                            Style="{StaticResource SecondaryButton}" Margin="0,5"/>
-
-                    <Button Content="🕐 Últimos 30 días"
-                            Command="{Binding FilterRecentCommand}"
-                            Style="{StaticResource SecondaryButton}" Margin="0,5"/>
-
-                    <!-- G1: ÁLBUMES ──────────────────────────── -->
-                    <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
-                    <TextBlock Text="ÁLBUMES" FontSize="11"
-                               Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
-
-                    <Button x:Name="AlbumsBtn" Click="AlbumsBtn_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,0,8">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📁" FontSize="14" Margin="0,0,8,0"/>
-                            <TextBlock Text="Gestionar álbumes"/>
-                        </StackPanel>
-                    </Button>
-
-                    <ItemsControl ItemsSource="{Binding SidebarAlbums}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Style="{StaticResource SecondaryButton}"
-                                        Margin="0,2" HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
-                                        Command="{Binding DataContext.FilterByAlbumCommand,
-                                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="📂" FontSize="12" Margin="0,0,6,0"/>
-                                        <TextBlock Text="{Binding Name}" FontSize="11" TextTrimming="CharacterEllipsis" MaxWidth="140"/>
-                                        <TextBlock Text="{Binding PhotoCount, StringFormat=' ({0})'}"
-                                                   FontSize="10" Foreground="{StaticResource TextMuted}" Margin="2,0,0,0"/>
-                                    </StackPanel>
-                                </Button>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <!-- G3: EVENTOS ──────────────────────────── -->
-                    <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
-                    <TextBlock Text="EVENTOS" FontSize="11"
-                               Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
-
-                    <ItemsControl ItemsSource="{Binding Events}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Style="{StaticResource SecondaryButton}"
-                                        Margin="0,2" HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
-                                        Command="{Binding DataContext.FilterByEventCommand,
-                                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="📅" FontSize="12" Margin="0,0,6,0"/>
-                                        <TextBlock Text="{Binding DisplayName}" FontSize="11"
-                                                   TextTrimming="CharacterEllipsis" MaxWidth="130"/>
-                                        <TextBlock Text="{Binding CountLabel}" FontSize="10"
-                                                   Foreground="{StaticResource TextMuted}" Margin="4,0,0,0"/>
-                                    </StackPanel>
-                                </Button>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <!-- G5: DASHBOARD ────────────────────────── -->
-                    <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
-                    <Button x:Name="DashboardBtn" Click="DashboardBtn_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,0,6">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📊" FontSize="14" Margin="0,0,8,0"/>
-                            <TextBlock Text="Dashboard"/>
-                        </StackPanel>
-                    </Button>
-
-                    <!-- IMP-005/010: HERRAMIENTAS ─────────────── -->
-                    <Button x:Name="DuplicatesBtn" Click="DuplicatesBtn_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,0,6">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🔄" FontSize="14" Margin="0,0,8,0"/>
-                            <TextBlock Text="Duplicados"/>
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="SettingsBtn" Click="SettingsBtn_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,0,6">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⚙️" FontSize="14" Margin="0,0,8,0"/>
-                            <TextBlock Text="Configuración"/>
-                        </StackPanel>
-                    </Button>
-
-                    <!-- Carpeta seleccionada -->
-                    <Separator Margin="0,20" Background="{StaticResource BorderColor}"/>
-                    <TextBlock Text="CARPETA" FontSize="11"
-                               Foreground="{StaticResource TextMuted}"
-                               Margin="0,0,0,10"/>
-                    <TextBlock Text="{Binding FolderPathText}"
-                               FontSize="11" Foreground="{StaticResource TextSecondary}"
-                               TextWrapping="Wrap"/>
+                            Padding="14,7" Margin="0,0,8,0"/>
+                    <Button Style="{StaticResource IconButton}"
+                            Content="⊞"
+                            Click="DashboardBtn_Click"
+                            ToolTip="Dashboard / Estadísticas"
+                            Margin="0,0,4,0"/>
+                    <Button Style="{StaticResource IconButton}"
+                            Content="⚙"
+                            Click="SettingsBtn_Click"
+                            ToolTip="Configuración"
+                            Margin="0,0,4,0"/>
                 </StackPanel>
-            </ScrollViewer>
+            </Grid>
         </Border>
 
-        <!-- PANEL PRINCIPAL CENTRO -->
-        <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+        <!-- ═══════════════════════════════════════════════════════════
+             ROW 1 — TOOLBAR (búsqueda + controles)
+        ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="1"
+                Background="{StaticResource BrushBgDeep}"
+                BorderBrush="{StaticResource BrushBorderSubtle}"
+                BorderThickness="0,0,0,1">
+            <Grid Margin="16,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-            <!-- Barra de búsqueda híbrida -->
-            <Border Grid.Row="0" Background="{StaticResource DarkBg}" Padding="20,15">
+                <!-- Search box -->
                 <TextBox x:Name="SearchBox"
+                         Grid.Column="0"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="14"
-                         Padding="15,12"
-                         Background="{StaticResource CardBg}"
-                         Foreground="{StaticResource TextPrimary}"
-                         BorderThickness="0"
-                         CaretBrush="{StaticResource PrimaryColor}">
+                         FontSize="13"
+                         Height="36"
+                         Padding="10,0"
+                         VerticalAlignment="Center"
+                         VerticalContentAlignment="Center">
                     <TextBox.InputBindings>
                         <KeyBinding Key="Enter" Command="{Binding HybridSearchCommand}"/>
                     </TextBox.InputBindings>
-                    <TextBox.Resources>
-                        <VisualBrush x:Key="Hint" TileMode="None" Stretch="None" AlignmentX="Left">
-                            <VisualBrush.Visual>
-                                <TextBlock Text="🔍 Buscar... (Enter para búsqueda híbrida)"
-                                           Foreground="{StaticResource TextMuted}"
-                                           FontSize="13" VerticalAlignment="Center"/>
-                            </VisualBrush.Visual>
-                        </VisualBrush>
-                    </TextBox.Resources>
                     <TextBox.Style>
-                        <Style TargetType="TextBox">
-                            <Setter Property="Background" Value="{StaticResource CardBg}"/>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                             <Style.Triggers>
                                 <Trigger Property="Text" Value="">
-                                    <Setter Property="Background" Value="{StaticResource Hint}"/>
+                                    <Setter Property="Background">
+                                        <Setter.Value>
+                                            <VisualBrush TileMode="None" Stretch="None" AlignmentX="Left" AlignmentY="Center">
+                                                <VisualBrush.Visual>
+                                                    <TextBlock Text="  Buscar fotos..."
+                                                               Foreground="#3D4F68"
+                                                               FontSize="13"
+                                                               Background="#1A2235"
+                                                               Padding="10,8"/>
+                                                </VisualBrush.Visual>
+                                            </VisualBrush>
+                                        </Setter.Value>
+                                    </Setter>
                                 </Trigger>
                             </Style.Triggers>
                         </Style>
                     </TextBox.Style>
                 </TextBox>
-            </Border>
 
-            <!-- Indicadores: modo híbrido + chips de filtro activo -->
-            <StackPanel Grid.Row="1" Margin="20,0,20,0">
-                <Border Visibility="{Binding IsHybridModeVisible, Converter={StaticResource BoolToVis}}"
-                        Background="#0078D4" Padding="8,4" CornerRadius="4"
-                        Margin="0,0,0,6" HorizontalAlignment="Left">
+                <!-- Sort ComboBox -->
+                <ComboBox x:Name="SortCombo"
+                          Grid.Column="1"
+                          Width="140"
+                          Margin="8,0,0,0"
+                          SelectedIndex="0"
+                          VerticalAlignment="Center"
+                          SelectionChanged="SortCombo_SelectionChanged">
+                    <ComboBoxItem Content="Más reciente" Tag="DateDesc"/>
+                    <ComboBoxItem Content="Más antigua"  Tag="DateAsc"/>
+                    <ComboBoxItem Content="Nombre A–Z"   Tag="NameAsc"/>
+                    <ComboBoxItem Content="Tamaño desc"  Tag="SizeDesc"/>
+                    <ComboBoxItem Content="Por cámara"   Tag="CameraModel"/>
+                </ComboBox>
+
+                <!-- Vista Grid / Lista -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0"
+                            VerticalAlignment="Center">
+                    <ToggleButton x:Name="GridViewBtn"
+                                  Style="{StaticResource ViewToggleButton}"
+                                  Content="⊞"
+                                  IsChecked="{Binding IsGridView}"
+                                  ToolTip="Vista en cuadrícula"/>
+                    <ToggleButton x:Name="ListViewBtn"
+                                  Style="{StaticResource ViewToggleButton}"
+                                  Content="≡"
+                                  IsChecked="{Binding IsListView}"
+                                  ToolTip="Vista en lista"
+                                  Margin="2,0,0,0"/>
+                </StackPanel>
+
+                <!-- AI Búsqueda híbrida -->
+                <Button Grid.Column="3"
+                        Style="{StaticResource GhostButton}"
+                        Content="AI"
+                        Command="{Binding HybridSearchCommand}"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        ToolTip="Búsqueda semántica híbrida (Enter)"/>
+
+                <!-- Detener indexación -->
+                <Button Grid.Column="4"
+                        Style="{StaticResource GhostButton}"
+                        Content="■ Detener"
+                        Command="{Binding StopIndexingCommand}"
+                        Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVis}}"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             ROW 2 — FILTER CHIPS + HYBRID MODE
+        ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="2"
+                Background="{StaticResource BrushBgDeep}"
+                Padding="16,6,16,6">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsHybridModeVisible}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ActiveFilters.Count}" Value="0">
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <StackPanel>
+                <!-- Modo híbrido activo -->
+                <Border Background="{StaticResource BrushAccentFaint}"
+                        BorderBrush="{StaticResource BrushAccent}"
+                        BorderThickness="1"
+                        CornerRadius="5"
+                        Padding="10,5"
+                        HorizontalAlignment="Left"
+                        Margin="0,0,0,4"
+                        Visibility="{Binding IsHybridModeVisible, Converter={StaticResource BoolToVis}}">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="🔍" Foreground="White" Margin="0,0,8,0"/>
-                        <TextBlock Text="{Binding HybridModeLabel}" Foreground="White" FontSize="11"/>
-                        <Button Content="✖"
+                        <TextBlock Text="AI"
+                                   Foreground="{StaticResource BrushAccent}"
+                                   FontSize="10" FontWeight="Bold"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding HybridModeLabel}"
+                                   Foreground="{StaticResource BrushAccentText}"
+                                   FontSize="11" VerticalAlignment="Center"/>
+                        <Button Content="✕"
                                 Command="{Binding ClearSearchCommand}"
-                                Background="Transparent" BorderThickness="0"
-                                Foreground="White" Margin="10,0,0,0" Cursor="Hand"/>
+                                Style="{StaticResource GhostButton}"
+                                Foreground="{StaticResource BrushTextMuted}"
+                                FontSize="10" Padding="6,2"
+                                Margin="8,0,0,0"/>
                     </StackPanel>
                 </Border>
 
-                <ItemsControl ItemsSource="{Binding ActiveFilters}" Margin="0,0,0,6">
+                <!-- Chips de filtros activos -->
+                <ItemsControl ItemsSource="{Binding ActiveFilters}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <WrapPanel/>
+                            <WrapPanel Orientation="Horizontal"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="#1E2D3D" CornerRadius="4" Margin="0,0,8,4" Padding="10,5"
-                                    BorderBrush="#2A4060" BorderThickness="1">
+                            <Border Style="{StaticResource FilterChipStyle}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding Label}" Foreground="#7BB8F0" FontSize="11"/>
-                                    <Button Content="✕" Command="{Binding RemoveCommand}"
-                                            Background="Transparent" BorderThickness="0"
-                                            Foreground="#5588BB" Margin="8,0,0,0" FontSize="10" Cursor="Hand"/>
+                                    <TextBlock Text="{Binding Label}"
+                                               Foreground="{StaticResource BrushAccentText}"
+                                               FontSize="11" VerticalAlignment="Center"/>
+                                    <Button Content="✕"
+                                            Command="{Binding RemoveCommand}"
+                                            Style="{StaticResource GhostButton}"
+                                            Foreground="{StaticResource BrushTextMuted}"
+                                            FontSize="9" Padding="4,1"
+                                            Margin="6,0,0,0"/>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </StackPanel>
+        </Border>
 
-            <!-- Barra de progreso -->
-            <Border Grid.Row="2" Background="{StaticResource DarkBg}" Padding="20,0,20,15">
-                <StackPanel>
-                    <TextBlock Text="{Binding ProgressText}"
-                               FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
-                    <ProgressBar x:Name="ProgressBar" Height="4"
-                                 Value="{Binding ProgressValue}"
-                                 IsIndeterminate="{Binding IsProgressIndeterminate}"
-                                 Foreground="{StaticResource PrimaryColor}"
-                                 Background="{StaticResource BorderColor}"
-                                 BorderThickness="0"/>
-                </StackPanel>
+        <!-- ═══════════════════════════════════════════════════════════
+             ROW 3 — CONTENT: Left Panel + Main Area
+        ═══════════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ─── LEFT PANEL — Filtros contextuales ─────────────── -->
+            <Border Grid.Column="0"
+                    Background="{StaticResource BrushBgSurface}"
+                    BorderBrush="{StaticResource BrushBorderSubtle}"
+                    BorderThickness="0,0,1,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,8,0,16">
+
+                        <!-- Progreso de indexación -->
+                        <Border Padding="14,10"
+                                Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding ProgressText}"
+                                           FontSize="11"
+                                           Foreground="{StaticResource BrushTextSecondary}"
+                                           TextTrimming="CharacterEllipsis"
+                                           Margin="0,0,0,5"/>
+                                <ProgressBar Value="{Binding ProgressValue}"
+                                             IsIndeterminate="{Binding IsProgressIndeterminate}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- SECCIÓN: Filtrar -->
+                        <TextBlock Text="FILTRAR"
+                                   Style="{StaticResource SectionLabel}"
+                                   Margin="16,8,16,4"/>
+
+                        <Button Content="Todas las fotos"
+                                Style="{StaticResource LeftNavItem}"
+                                Command="{Binding FilterAllCommand}"/>
+                        <Button Content="Últimos 30 días"
+                                Style="{StaticResource LeftNavItem}"
+                                Command="{Binding FilterRecentCommand}"/>
+                        <Button Content="Duplicados"
+                                Style="{StaticResource LeftNavItem}"
+                                Click="DuplicatesBtn_Click"/>
+                        <Button Content="Presentación"
+                                Style="{StaticResource LeftNavItem}"
+                                Click="PresentationBtn_Click"/>
+
+                        <Separator Margin="14,8"/>
+
+                        <!-- SECCIÓN: Álbumes -->
+                        <TextBlock Text="ÁLBUMES"
+                                   Style="{StaticResource SectionLabel}"
+                                   Margin="16,0,16,4"/>
+
+                        <ItemsControl ItemsSource="{Binding SidebarAlbums}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource LeftNavItem}"
+                                            Command="{Binding DataContext.FilterByAlbumCommand,
+                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="32"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <!-- Miniatura de portada del álbum -->
+                                            <Border Grid.Column="0"
+                                                    Width="24" Height="24"
+                                                    CornerRadius="3"
+                                                    Background="{StaticResource BrushBgCardHover}"
+                                                    ClipToBounds="True">
+                                                <Image Source="{Binding CoverThumbnailPath,
+                                                           Converter={StaticResource BitmapImageConv}}"
+                                                       Stretch="UniformToFill"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Name}"
+                                                       FontSize="12"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"
+                                                       Margin="6,0,4,0"/>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding PhotoCount}"
+                                                       FontSize="10"
+                                                       Foreground="{StaticResource BrushTextMuted}"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button Content="Gestionar álbumes"
+                                Style="{StaticResource LeftNavItem}"
+                                Click="AlbumsBtn_Click"
+                                Foreground="{StaticResource BrushAccentText}"/>
+
+                        <Separator Margin="14,8"/>
+
+                        <!-- SECCIÓN: Eventos -->
+                        <TextBlock Text="EVENTOS"
+                                   Style="{StaticResource SectionLabel}"
+                                   Margin="16,0,16,4"/>
+
+                        <ItemsControl ItemsSource="{Binding Events}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource LeftNavItem}"
+                                            Command="{Binding DataContext.FilterByEventCommand,
+                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding DisplayName}"
+                                                       FontSize="12"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding CountLabel}"
+                                                       FontSize="10"
+                                                       Foreground="{StaticResource BrushTextMuted}"
+                                                       Margin="6,0,0,0"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Separator Margin="14,8"/>
+
+                        <!-- SECCIÓN: Etiquetas populares -->
+                        <TextBlock Text="ETIQUETAS"
+                                   Style="{StaticResource SectionLabel}"
+                                   Margin="16,0,16,4"/>
+
+                        <ItemsControl ItemsSource="{Binding Tags}" Margin="10,0,10,0">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Margin="6,0"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource GhostButton}"
+                                            Content="{Binding Name}"
+                                            Padding="8,4" FontSize="11" Margin="2,2"
+                                            Command="{Binding DataContext.FilterByTagCommand,
+                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding Name}">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="4"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource BrushBgSelected}"/>
+                                                        <Setter Property="Foreground" Value="{StaticResource BrushAccentText}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Separator Margin="14,10"/>
+
+                        <!-- SECCIÓN: Herramientas -->
+                        <TextBlock Text="HERRAMIENTAS"
+                                   Style="{StaticResource SectionLabel}"
+                                   Margin="16,0,16,4"/>
+
+                        <Button Content="Reprocesar tags"
+                                Style="{StaticResource LeftNavItem}"
+                                x:Name="ReprocessTagsBtn"
+                                Click="ReprocessTagsBtn_Click"/>
+                        <Button Content="Test Vision"
+                                Style="{StaticResource LeftNavItem}"
+                                Click="TestVisionBtn_Click"
+                                Foreground="{StaticResource BrushTextMuted}"/>
+                        <Button Content="Test OCR"
+                                Style="{StaticResource LeftNavItem}"
+                                Click="TestOcrBtn_Click"
+                                Foreground="{StaticResource BrushTextMuted}"/>
+
+                        <!-- Carpeta activa (footer del panel) -->
+                        <Separator Margin="14,10"/>
+                        <TextBlock Text="CARPETA"
+                                   Style="{StaticResource SectionLabel}"
+                                   Margin="16,0,16,4"/>
+                        <TextBlock Text="{Binding FolderPathText}"
+                                   FontSize="11"
+                                   Foreground="{StaticResource BrushTextMuted}"
+                                   TextWrapping="Wrap"
+                                   Margin="14,0,14,0"/>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
 
-            <!-- Grid de fotos + loading overlay + empty state -->
-            <Grid Grid.Row="3">
-                <!-- IMP-T3-001: VirtualizingWrapPanel — solo renderiza los elementos visibles -->
-                <!-- CanContentScroll="True" es esencial: delega scroll a IScrollInfo del panel -->
+            <!-- ─── MAIN AREA — Grid de fotos + detalle ───────────── -->
+            <Grid Grid.Column="1">
+                <!-- Loading overlay -->
+                <Border Visibility="{Binding IsLoadingPhotos, Converter={StaticResource BoolToVis}}"
+                        Background="{StaticResource BrushBgDeep}"
+                        Panel.ZIndex="10">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <ProgressBar IsIndeterminate="True" Width="180"/>
+                        <TextBlock Text="Cargando fotos..."
+                                   FontSize="12" Foreground="{StaticResource BrushTextMuted}"
+                                   Margin="0,12" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Empty state -->
+                <Border Visibility="{Binding HasNoPhotos, Converter={StaticResource BoolToVis}}"
+                        Background="{StaticResource BrushBgDeep}">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="○" FontSize="56"
+                                   Foreground="{StaticResource BrushBorderDefault}"
+                                   HorizontalAlignment="Center" Margin="0,0,0,16"/>
+                        <TextBlock Text="Sin fotos aún"
+                                   FontSize="20" FontWeight="SemiBold"
+                                   Foreground="{StaticResource BrushTextPrimary}"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="Selecciona una carpeta para comenzar"
+                                   FontSize="13" Foreground="{StaticResource BrushTextMuted}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,8,0,24"/>
+                        <Button Content="+ Indexar carpeta"
+                                Style="{StaticResource PrimaryButton}"
+                                Command="{Binding StartIndexingCommand}"
+                                HorizontalAlignment="Center"
+                                Padding="20,10"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- VISTA GRID — VirtualizingWrapPanel -->
                 <ItemsControl ItemsSource="{Binding Photos}"
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling"
                               ScrollViewer.CanContentScroll="True"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                              Visibility="{Binding IsGridView, Converter={StaticResource BoolToVis}}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <controls:VirtualizingWrapPanel/>
@@ -449,111 +587,186 @@
                             </ScrollViewer>
                         </ControlTemplate>
                     </ItemsControl.Template>
-                    <ItemsControl.ItemContainerStyle>
-                        <Style TargetType="ContentPresenter">
-                            <Setter Property="Width" Value="220"/>
-                        </Style>
-                    </ItemsControl.ItemContainerStyle>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Button Command="{Binding DataContext.SelectPhotoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            <Button Command="{Binding DataContext.SelectPhotoCommand,
+                                              RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                     CommandParameter="{Binding}"
-                                    Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand"
-                                    Width="220" Margin="8">
+                                    Background="Transparent" BorderThickness="0"
+                                    Padding="0" Cursor="Hand" Width="220" Margin="5">
                                 <Border Style="{StaticResource PhotoCard}" Width="220">
-                                    <StackPanel>
-                                        <Border Height="180" CornerRadius="8,8,0,0" Background="#1A1A1A">
-                                            <!-- IMP-T3-006C: BitmapImageConverter libera file handle y permite GC -->
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="165"/>
+                                            <RowDefinition Height="50"/>
+                                        </Grid.RowDefinitions>
+                                        <!-- Imagen — recorte UniformToFill en borde redondeado -->
+                                        <Border Grid.Row="0"
+                                                CornerRadius="8,8,0,0"
+                                                Background="{StaticResource BrushBgDeep}"
+                                                ClipToBounds="True">
                                             <Image Source="{Binding ThumbnailPath,
                                                        Converter={StaticResource BitmapImageConv}}"
-                                                   Stretch="Uniform"
+                                                   Stretch="UniformToFill"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"
                                                    VerticalAlignment="Center"/>
                                         </Border>
-                                        <StackPanel Margin="12,10,12,12">
-                                            <TextBlock Text="{Binding FileName}"
-                                                       FontSize="12"
-                                                       Foreground="{StaticResource TextPrimary}"
-                                                       TextWrapping="Wrap"
-                                                       MaxHeight="35"/>
-                                            <TextBlock Text="{Binding DateTaken, StringFormat='dd/MM/yyyy'}"
-                                                       FontSize="10"
-                                                       Foreground="{StaticResource TextSecondary}"
-                                                       Margin="0,5,0,0"/>
-                                            <TextBlock Text="{Binding CameraModel}"
-                                                       FontSize="9"
-                                                       Foreground="{StaticResource TextMuted}"
+                                        <!-- Info — limpia, solo filename y fecha -->
+                                        <Grid Grid.Row="1" Margin="10,9,10,0">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Grid.Row="0"
+                                                       Text="{Binding FileName}"
+                                                       FontSize="12" FontWeight="Medium"
+                                                       Foreground="{StaticResource BrushTextPrimary}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Grid.Row="1"
+                                                       Text="{Binding DateTaken, StringFormat=dd\ MMM\ yyyy, TargetNullValue='—'}"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource BrushTextMuted}"
                                                        Margin="0,3,0,0"/>
-                                        </StackPanel>
-                                    </StackPanel>
+                                        </Grid>
+                                    </Grid>
                                 </Border>
                             </Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- F2: Cargar más — fuera del ItemsControl, pegado al fondo del Grid -->
+                <!-- VISTA LISTA -->
+                <ItemsControl ItemsSource="{Binding Photos}"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              Visibility="{Binding IsListView, Converter={StaticResource BoolToVis}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.Template>
+                        <ControlTemplate TargetType="ItemsControl">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ItemsPresenter/>
+                            </ScrollViewer>
+                        </ControlTemplate>
+                    </ItemsControl.Template>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Command="{Binding DataContext.SelectPhotoCommand,
+                                              RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}"
+                                    Background="Transparent" BorderThickness="0"
+                                    Padding="0" Cursor="Hand"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch">
+                                <Border Style="{StaticResource PhotoListRow}"
+                                        Height="72" HorizontalAlignment="Stretch">
+                                    <Grid Margin="16,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="60"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="120"/>
+                                        </Grid.ColumnDefinitions>
+                                        <!-- Miniatura -->
+                                        <Border Grid.Column="0"
+                                                Width="52" Height="52"
+                                                CornerRadius="5"
+                                                Background="{StaticResource BrushBgCard}"
+                                                ClipToBounds="True"
+                                                VerticalAlignment="Center">
+                                            <Image Source="{Binding ThumbnailPath,
+                                                       Converter={StaticResource BitmapImageConv}}"
+                                                   Stretch="UniformToFill"/>
+                                        </Border>
+                                        <!-- Nombre + cámara -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                                            <TextBlock Text="{Binding FileName}"
+                                                       FontSize="13" FontWeight="Medium"
+                                                       Foreground="{StaticResource BrushTextPrimary}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding CameraModel}"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource BrushTextMuted}"
+                                                       Margin="0,3,0,0"/>
+                                        </StackPanel>
+                                        <!-- Fecha -->
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding DateTaken, StringFormat=dd\ MMM\ yyyy, TargetNullValue='—'}"
+                                                   FontSize="12"
+                                                   Foreground="{StaticResource BrushTextSecondary}"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Botón "Cargar más" -->
                 <Button Command="{Binding LoadMoreCommand}"
                         Visibility="{Binding HasMorePhotos, Converter={StaticResource BoolToVis}}"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Bottom"
-                        Margin="0,0,0,8"
-                        Padding="24,12"
-                        Background="#252525"
-                        Foreground="#AAAAAA"
-                        FontSize="13">
+                        Style="{StaticResource SecondaryButton}"
+                        Margin="0,0,0,12"
+                        Padding="20,10">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="📥" Margin="0,0,8,0"/>
-                        <TextBlock Text="{Binding PageInfoText}"/>
-                        <TextBlock Text=" — Cargar más" Foreground="#666666"/>
+                        <TextBlock Text="{Binding PageInfoText}"
+                                   Foreground="{StaticResource BrushTextSecondary}"/>
+                        <TextBlock Text=" — Cargar más"
+                                   Foreground="{StaticResource BrushTextMuted}"/>
                     </StackPanel>
                 </Button>
 
-                <!-- Loading overlay -->
-                <Border Visibility="{Binding IsLoadingPhotos, Converter={StaticResource BoolToVis}}"
-                        Background="#0F0F0F">
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <ProgressBar IsIndeterminate="True" Width="200" Height="3" BorderThickness="0"
-                                     Foreground="#0078D4" Background="#252525"/>
-                        <TextBlock Text="Cargando fotos..." FontSize="12" Foreground="#666666"
-                                   Margin="0,12" HorizontalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Empty state -->
-                <Border Visibility="{Binding HasNoPhotos, Converter={StaticResource BoolToVis}}"
-                        Background="#0F0F0F">
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="📸" FontSize="72" HorizontalAlignment="Center" Margin="0,0,0,16"/>
-                        <TextBlock Text="Sin fotos aún" FontSize="20" FontWeight="SemiBold"
-                                   Foreground="White" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Selecciona una carpeta para comenzar a organizar tu colección"
-                                   FontSize="13" Foreground="#666666" HorizontalAlignment="Center"
-                                   TextAlignment="Center" Margin="0,8,0,24"/>
-                        <Button Content="📁 Seleccionar Carpeta" Command="{Binding StartIndexingCommand}"
-                                Background="#0078D4" Foreground="White" Padding="20,12" HorizontalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
+                <!-- Panel de detalle — slide-in desde la derecha -->
+                <controls:PhotoDetailPanel
+                    HorizontalAlignment="Right"
+                    Width="340"
+                    DataContext="{Binding SelectedPhoto}"
+                    Visibility="{Binding DataContext.SelectedPhoto, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource NullToVis}}"
+                    Panel.ZIndex="5"/>
             </Grid>
-
-            <!-- Barra de estado -->
-            <Border Grid.Row="4" Background="{StaticResource PanelBg}"
-                    BorderBrush="{StaticResource BorderColor}" BorderThickness="0,1,0,0"
-                    Padding="20,10">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding StatusText}"
-                               Foreground="{StaticResource TextSecondary}" FontSize="12"/>
-                    <TextBlock Text="{Binding PhotoCountStatus}"
-                               Foreground="{StaticResource TextMuted}" FontSize="12" Margin="20,0,0,0"/>
-                    <TextBlock Text="{Binding PageInfoText}"
-                               Foreground="#444444" FontSize="12" Margin="20,0,0,0"/>
-                </StackPanel>
-            </Border>
         </Grid>
 
-        <!-- PANEL DE DETALLE (Col 2) -->
-        <controls:PhotoDetailPanel
-            Grid.Column="2" Width="360"
-            DataContext="{Binding SelectedPhoto}"
-            Visibility="{Binding SelectedPhoto, Converter={StaticResource NullToVis}}"/>
+        <!-- ═══════════════════════════════════════════════════════════
+             ROW 4 — STATUS BAR
+        ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="4"
+                Background="{StaticResource BrushBgStatusBar}"
+                BorderBrush="{StaticResource BrushBorderSubtle}"
+                BorderThickness="0,1,0,0">
+            <Grid Margin="16,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Izquierda: estado / progreso -->
+                <TextBlock Grid.Column="0"
+                           Text="{Binding StatusText}"
+                           FontSize="11"
+                           Foreground="{StaticResource BrushTextMuted}"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+
+                <!-- Derecha: conteo de fotos -->
+                <TextBlock Grid.Column="1"
+                           Text="{Binding PhotoCountStatus}"
+                           FontSize="11"
+                           Foreground="{StaticResource BrushTextSecondary}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,16,0"/>
+
+                <!-- Info de paginación -->
+                <TextBlock Grid.Column="2"
+                           Text="{Binding PageInfoText}"
+                           FontSize="11"
+                           Foreground="{StaticResource BrushTextMuted}"
+                           VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

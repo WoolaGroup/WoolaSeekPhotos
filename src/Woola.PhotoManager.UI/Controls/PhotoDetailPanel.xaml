@@ -5,38 +5,74 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
-        <Style x:Key="SectionHeader" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="#555555"/>
-            <Setter Property="Margin" Value="0,16,0,6"/>
-        </Style>
-
         <Style x:Key="DetailLabel" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="#666666"/>
-            <Setter Property="Width" Value="90"/>
+            <Setter Property="FontSize"          Value="11"/>
+            <Setter Property="Foreground"        Value="{StaticResource BrushTextMuted}"/>
+            <Setter Property="Width"             Value="86"/>
             <Setter Property="VerticalAlignment" Value="Top"/>
         </Style>
 
         <Style x:Key="DetailValue" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="#CCCCCC"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="FontSize"      Value="11"/>
+            <Setter Property="Foreground"    Value="{StaticResource BrushTextSecondary}"/>
+            <Setter Property="TextWrapping"  Value="Wrap"/>
+        </Style>
+
+        <!-- Tab item — subrayado activo, sin chrome -->
+        <Style x:Key="DetailTabItem" TargetType="TabItem">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"         Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabBorder"
+                                BorderBrush="Transparent"
+                                BorderThickness="0,0,0,2"
+                                Padding="13,0,13,2"
+                                Height="36"
+                                Background="Transparent"
+                                Cursor="Hand">
+                            <TextBlock x:Name="TabText"
+                                       Text="{TemplateBinding Header}"
+                                       FontSize="10" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource BrushTextMuted}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabBorder" Property="BorderBrush"
+                                        Value="{StaticResource BrushAccent}"/>
+                                <Setter TargetName="TabText"   Property="Foreground"
+                                        Value="{StaticResource BrushTextPrimary}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabText" Property="Foreground"
+                                        Value="{StaticResource BrushTextSecondary}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </UserControl.Resources>
 
-    <Border BorderBrush="#333333" BorderThickness="1,0,0,0" Background="#141414">
+    <Border Background="{StaticResource BrushBgSurface}"
+            BorderBrush="{StaticResource BrushBorderSubtle}"
+            BorderThickness="1,0,0,0">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="220"/>
-                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>  <!-- Header -->
+                <RowDefinition Height="200"/>   <!-- Preview -->
+                <RowDefinition Height="*"/>     <!-- Tabs -->
             </Grid.RowDefinitions>
 
-            <!-- Header: filename + close button -->
-            <Border Grid.Row="0" Background="#0F0F0F"
-                    BorderBrush="#333333" BorderThickness="0,0,0,1" Padding="16,12">
+            <!-- ── Header: nombre + botón cerrar ───────────────────────── -->
+            <Border Grid.Row="0"
+                    Background="{StaticResource BrushBgDeep}"
+                    BorderBrush="{StaticResource BrushBorderSubtle}"
+                    BorderThickness="0,0,0,1"
+                    Padding="16,10">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -44,179 +80,237 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{Binding FileName}"
                                FontSize="12" FontWeight="SemiBold"
-                               Foreground="White"
+                               Foreground="{StaticResource BrushTextPrimary}"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Content="✕"
+                    <Button Grid.Column="1"
+                            Content="✕"
                             Command="{Binding CloseCommand}"
-                            Background="Transparent" BorderThickness="0"
-                            Foreground="#666666" FontSize="14"
-                            Cursor="Hand" Padding="8,4"
+                            Style="{StaticResource GhostButton}"
+                            FontSize="13" Padding="8,4"
+                            Foreground="{StaticResource BrushTextMuted}"
                             VerticalAlignment="Center"/>
                 </Grid>
             </Border>
 
-            <!-- Photo preview -->
-            <Border Grid.Row="1" Background="#0A0A0A">
+            <!-- ── Vista previa ─────────────────────────────────────────── -->
+            <Border Grid.Row="1" Background="{StaticResource BrushBgDeep}">
                 <Image Source="{Binding ThumbnailPath}"
                        Stretch="Uniform"
                        RenderOptions.BitmapScalingMode="HighQuality"/>
             </Border>
 
-            <!-- Scrollable details -->
-            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                <StackPanel Margin="16,8,16,16">
+            <!-- ── Detalles en pestañas ──────────────────────────────────── -->
+            <TabControl Grid.Row="2"
+                        Background="{StaticResource BrushBgSurface}"
+                        BorderThickness="0"
+                        ItemContainerStyle="{StaticResource DetailTabItem}">
 
-                    <!-- Loading state -->
-                    <StackPanel Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"
-                                Margin="0,12,0,0">
-                        <ProgressBar IsIndeterminate="True" Height="3" BorderThickness="0"
-                                     Foreground="#0078D4" Background="#252525"/>
-                        <TextBlock Text="Cargando detalles..." FontSize="11"
-                                   Foreground="#555555" HorizontalAlignment="Center"
-                                   Margin="0,8,0,0"/>
-                    </StackPanel>
+                <TabControl.Template>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="36"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <!-- Franja de pestañas -->
+                            <Border Grid.Row="0"
+                                    Background="{StaticResource BrushBgSurface}"
+                                    BorderBrush="{StaticResource BrushBorderSubtle}"
+                                    BorderThickness="0,0,0,1">
+                                <TabPanel IsItemsHost="True" Background="Transparent"/>
+                            </Border>
+                            <!-- Contenido de la pestaña activa -->
+                            <ContentPresenter Grid.Row="1"
+                                              x:Name="PART_SelectedContentHost"
+                                              ContentSource="SelectedContent"/>
+                        </Grid>
+                    </ControlTemplate>
+                </TabControl.Template>
 
-                    <!-- ARCHIVO -->
-                    <TextBlock Text="ARCHIVO" Style="{StaticResource SectionHeader}"/>
+                <!-- ═══ PESTAÑA 1 — INFO ════════════════════════════════ -->
+                <TabItem Header="INFO">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Background="{StaticResource BrushBgSurface}">
+                        <StackPanel Margin="16,8,16,16">
 
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="Tamaño" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding FileSize}" Style="{StaticResource DetailValue}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="Resolución" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding Resolution}" Style="{StaticResource DetailValue}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="Fecha" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding DateTaken, StringFormat='dd/MM/yyyy HH:mm'}"
-                                   Style="{StaticResource DetailValue}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="Indexado" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding IndexedAt}" Style="{StaticResource DetailValue}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="Ruta" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding FilePath}" Style="{StaticResource DetailValue}"
-                                   MaxWidth="230" TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding FilePath}"/>
-                    </StackPanel>
+                            <!-- Cargando -->
+                            <StackPanel Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"
+                                        Margin="0,10,0,0">
+                                <ProgressBar IsIndeterminate="True"/>
+                                <TextBlock Text="Cargando detalles..."
+                                           FontSize="11"
+                                           Foreground="{StaticResource BrushTextMuted}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
 
-                    <!-- CÁMARA / EXIF -->
-                    <TextBlock Text="CÁMARA" Style="{StaticResource SectionHeader}"/>
+                            <!-- ARCHIVO -->
+                            <TextBlock Text="ARCHIVO" Style="{StaticResource SectionLabel}"/>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="Modelo" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding CameraModel}" Style="{StaticResource DetailValue}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="Lente" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding LensModel}" Style="{StaticResource DetailValue}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="Apertura" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding Aperture}" Style="{StaticResource DetailValue}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="Velocidad" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding ShutterSpeed}" Style="{StaticResource DetailValue}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="ISO" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding Iso}" Style="{StaticResource DetailValue}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                        <TextBlock Text="Focal" Style="{StaticResource DetailLabel}"/>
-                        <TextBlock Text="{Binding FocalLength}" Style="{StaticResource DetailValue}"/>
-                    </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="Tamaño"    Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding FileSize}" Style="{StaticResource DetailValue}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="Resolución" Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding Resolution}" Style="{StaticResource DetailValue}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="Fecha"     Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding DateTaken, StringFormat='dd/MM/yyyy HH:mm'}"
+                                           Style="{StaticResource DetailValue}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="Indexado"  Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding IndexedAt}" Style="{StaticResource DetailValue}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="Ruta"      Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding FilePath}"
+                                           Style="{StaticResource DetailValue}"
+                                           MaxWidth="218"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding FilePath}"/>
+                            </StackPanel>
 
-                    <!-- TAGS -->
-                    <TextBlock Text="TAGS" Style="{StaticResource SectionHeader}"/>
-                    <ItemsControl ItemsSource="{Binding Tags}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="#1A2A3A" CornerRadius="3"
-                                        Margin="0,0,6,6" Padding="8,4">
-                                    <TextBlock Text="{Binding Name}"
-                                               FontSize="10" Foreground="#7BB8F0"/>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                            <!-- CÁMARA / EXIF -->
+                            <TextBlock Text="CÁMARA" Style="{StaticResource SectionLabel}"/>
 
-                    <!-- IMP-009: Ver fotos similares -->
-                    <Button x:Name="SimilarPhotosBtn"
-                            Content="🔍 Ver fotos similares"
-                            Click="SimilarPhotosBtn_Click"
-                            Margin="0,8,0,0" Padding="10,6"
-                            Background="#1A2A1A" Foreground="#7BB8F0"
-                            BorderBrush="#2A4A2A" BorderThickness="1"
-                            FontSize="11" Cursor="Hand" HorizontalAlignment="Left">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}"
-                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                        CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#253525"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="Modelo"    Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding CameraModel}" Style="{StaticResource DetailValue}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="Lente"     Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding LensModel}" Style="{StaticResource DetailValue}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="Apertura"  Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding Aperture}" Style="{StaticResource DetailValue}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="Velocidad" Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding ShutterSpeed}" Style="{StaticResource DetailValue}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="ISO"       Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding Iso}" Style="{StaticResource DetailValue}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="Focal"     Style="{StaticResource DetailLabel}"/>
+                                <TextBlock Text="{Binding FocalLength}" Style="{StaticResource DetailValue}"/>
+                            </StackPanel>
 
-                    <!-- ROSTROS -->
-                    <TextBlock Text="ROSTROS" Style="{StaticResource SectionHeader}"/>
-                    <TextBlock Text="{Binding FaceSummary}"
-                               FontSize="11" Foreground="#AAAAAA"
-                               TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
 
-                    <!-- G1: ÁLBUMES -->
-                    <TextBlock Text="ÁLBUM" Style="{StaticResource SectionHeader}"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                        <ComboBox ItemsSource="{Binding AvailableAlbums}"
-                                  SelectedItem="{Binding SelectedAlbum}"
-                                  DisplayMemberPath="Name"
-                                  Width="155" Height="28"
-                                  Background="#252525" Foreground="White"
-                                  BorderBrush="#444444" FontSize="11"
-                                  VerticalContentAlignment="Center"/>
-                        <Button Content="＋ Agregar"
-                                Command="{Binding AddToAlbumCommand}"
-                                Background="#0078D4" Foreground="White"
-                                BorderThickness="0" Padding="10,5"
-                                Margin="8,0,0,0" FontSize="11" Cursor="Hand">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}"
-                                            CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsEnabled" Value="False">
-                                            <Setter Property="Opacity" Value="0.4"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                    </StackPanel>
-                    <TextBlock Text="{Binding AlbumAddStatus}"
-                               FontSize="10" Foreground="#7BB8F0" Margin="0,5,0,0"/>
+                <!-- ═══ PESTAÑA 2 — ETIQUETAS ═══════════════════════════ -->
+                <TabItem Header="ETIQUETAS">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Background="{StaticResource BrushBgSurface}">
+                        <StackPanel Margin="16,12,16,16">
 
-                </StackPanel>
-            </ScrollViewer>
+                            <ItemsControl ItemsSource="{Binding Tags}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource BrushBgSelected}"
+                                                CornerRadius="4"
+                                                Margin="0,0,5,5"
+                                                Padding="9,4">
+                                            <TextBlock Text="{Binding Name}"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource BrushAccentText}"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Estado vacío -->
+                            <TextBlock Text="Sin etiquetas aún"
+                                       FontSize="12"
+                                       Foreground="{StaticResource BrushTextMuted}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,18,0,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock"
+                                           BasedOn="{StaticResource {x:Type TextBlock}}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Tags.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <Separator Margin="0,14"/>
+
+                            <!-- IMP-009: Fotos similares -->
+                            <Button x:Name="SimilarPhotosBtn"
+                                    Content="Ver fotos similares"
+                                    Click="SimilarPhotosBtn_Click"
+                                    Style="{StaticResource SecondaryButton}"
+                                    HorizontalAlignment="Left"
+                                    Padding="12,6" FontSize="11"/>
+
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ═══ PESTAÑA 3 — ROSTROS ═════════════════════════════ -->
+                <TabItem Header="ROSTROS">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Background="{StaticResource BrushBgSurface}">
+                        <StackPanel Margin="16,12,16,16">
+                            <TextBlock Text="{Binding FaceSummary}"
+                                       FontSize="12"
+                                       Foreground="{StaticResource BrushTextSecondary}"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ═══ PESTAÑA 4 — ÁLBUMES ═════════════════════════════ -->
+                <TabItem Header="ÁLBUMES">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Background="{StaticResource BrushBgSurface}">
+                        <StackPanel Margin="16,12,16,16">
+
+                            <TextBlock Text="AÑADIR A ÁLBUM"
+                                       Style="{StaticResource SectionLabel}"/>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <ComboBox ItemsSource="{Binding AvailableAlbums}"
+                                          SelectedItem="{Binding SelectedAlbum}"
+                                          DisplayMemberPath="Name"
+                                          Width="148"
+                                          VerticalContentAlignment="Center"/>
+                                <Button Content="Agregar"
+                                        Command="{Binding AddToAlbumCommand}"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Padding="10,5"
+                                        Margin="8,0,0,0"
+                                        FontSize="11"/>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding AlbumAddStatus}"
+                                       FontSize="11"
+                                       Foreground="{StaticResource BrushAccentText}"
+                                       Margin="0,8,0,0"/>
+
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+            </TabControl>
         </Grid>
     </Border>
 </UserControl>

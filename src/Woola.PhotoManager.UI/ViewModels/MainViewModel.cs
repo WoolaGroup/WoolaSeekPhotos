@@ -8,6 +8,9 @@ using Woola.PhotoManager.UI.Services;
 
 namespace Woola.PhotoManager.UI.ViewModels;
 
+// T4-001: Ordenación de la cuadrícula principal
+public enum SortMode { DateDesc, DateAsc, NameAsc, SizeDesc, CameraModel }
+
 public partial class MainViewModel : ObservableObject
 {
     private readonly IPhotoIndexer             _photoIndexer;
@@ -36,6 +39,9 @@ public partial class MainViewModel : ObservableObject
     private int    _filterOffset      = 0;
     private string _activeFilterType  = string.Empty;  // "album" | "tag" | ""
     private Album? _activeAlbum;
+
+    // T4-003: Navegación con teclado — foto actualmente seleccionada
+    private PhotoViewModel? _currentPhotoVm;
 
     // IMP-T3-002: RangeObservableCollection for batch UI updates
     public RangeObservableCollection<PhotoViewModel> Photos { get; } = new();
@@ -66,6 +72,26 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool   _hasNoPhotos;
     [ObservableProperty] private bool   _hasMorePhotos;
     [ObservableProperty] private string _pageInfoText         = string.Empty;
+
+    // T4-001: Ordenación
+    [ObservableProperty] private SortMode _sortMode = SortMode.DateDesc;
+
+    // T4-002: Modo de vista — cuadrícula o lista
+    [ObservableProperty] private bool _isGridView = true;
+    [ObservableProperty] private bool _isListView;
+
+    // ── Sincronización de modo de vista (mutuamente excluyentes) ─────────────
+
+    partial void OnSortModeChanged(SortMode value)
+    {
+        _currentOffset = 0;
+        _ = LoadPhotosAsync(reset: true);
+    }
+
+    partial void OnIsGridViewChanged(bool value) { if (value) IsListView = false; }
+    partial void OnIsListViewChanged(bool value) { if (value) IsGridView = false; }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     public MainViewModel(
         IPhotoIndexer          photoIndexer,
@@ -150,8 +176,9 @@ public partial class MainViewModel : ObservableObject
                 _totalCount    = await _photoRepository.GetTotalCountAsync();
             }
 
-            // IMP-T3-006B: la DB ya devuelve ORDER BY COALESCE(DateTaken,CreatedAt) DESC
-            var photos = (await _photoRepository.GetPhotosAsync(limit: PageSize, offset: _currentOffset)).ToList();
+            // T4-001: pasar el modo de ordenación actual al repositorio
+            var photos = (await _photoRepository.GetPhotosAsync(
+                limit: PageSize, offset: _currentOffset, sort: SortMode.ToString())).ToList();
 
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
@@ -505,6 +532,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task SelectPhotoAsync(PhotoViewModel vm)
     {
+        _currentPhotoVm = vm;  // T4-003: registrar para navegación con teclado
         var detail = new PhotoDetailViewModel(vm, CloseDetailCommand);
         SelectedPhoto = detail;
         await detail.LoadDetailsAsync(_photoRepository, _tagRepository, _faceRepository, _albumRepository);
@@ -512,6 +540,25 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void CloseDetail() => SelectedPhoto = null;
+
+    // T4-003: Navegación por teclado — foto siguiente / anterior
+    [RelayCommand]
+    private async Task NavigateNextPhotoAsync()
+    {
+        if (_currentPhotoVm == null || Photos.Count == 0) return;
+        var idx = Photos.IndexOf(_currentPhotoVm);
+        if (idx >= 0 && idx < Photos.Count - 1)
+            await SelectPhotoAsync(Photos[idx + 1]);
+    }
+
+    [RelayCommand]
+    private async Task NavigatePrevPhotoAsync()
+    {
+        if (_currentPhotoVm == null || Photos.Count == 0) return;
+        var idx = Photos.IndexOf(_currentPhotoVm);
+        if (idx > 0)
+            await SelectPhotoAsync(Photos[idx - 1]);
+    }
 
     // ── Indexing ──────────────────────────────────────────────────────────────
 

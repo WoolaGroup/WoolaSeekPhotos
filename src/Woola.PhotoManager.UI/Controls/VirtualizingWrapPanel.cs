@@ -20,8 +20,8 @@ namespace Woola.PhotoManager.UI.Controls;
 public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 {
     // ── Dimensiones fijas de cada tarjeta ────────────────────────────────────
-    private const double ItemWidth  = 236.0;   // 220 card + 8 margen izq + 8 margen der
-    private const double ItemHeight = 278.0;   // 180 imagen + ~90 texto + márgenes
+    private const double ItemWidth  = 230.0;   // 220 card + 5 margen izq + 5 margen der
+    private const double ItemHeight = 225.0;   // 165 imagen + 50 info + 10 márgenes
 
     // ── Estado IScrollInfo ───────────────────────────────────────────────────
     private ScrollViewer? _scrollOwner;

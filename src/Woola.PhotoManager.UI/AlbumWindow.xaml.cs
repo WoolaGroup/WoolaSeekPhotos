@@ -185,15 +185,41 @@ public partial class AlbumWindow : Window
         await LoadAlbumsAsync();
     }
 
-    // ── Crear álbum ───────────────────────────────────────────────────────────
+    // ── Crear álbum (formulario inline) ──────────────────────────────────────
 
-    private async void CreateAlbumBtn_Click(object sender, RoutedEventArgs e)
+    private void CreateAlbumBtn_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new CreateAlbumDialog { Owner = this };
-        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.AlbumName)) return;
+        CreateAlbumBtn.Visibility = Visibility.Collapsed;
+        NewAlbumForm.Visibility   = Visibility.Visible;
+        NewAlbumNameBox.Text      = string.Empty;
+        NewAlbumNameBox.Focus();
+    }
 
-        await _albumRepository.CreateAlbumAsync(dialog.AlbumName.Trim(), dialog.AlbumDescription?.Trim());
-        StatusTxt.Text = $"Álbum '{dialog.AlbumName}' creado.";
+    private async void ConfirmCreateBtn_Click(object sender, RoutedEventArgs e)
+        => await DoCreateAlbumAsync();
+
+    private void CancelCreateBtn_Click(object sender, RoutedEventArgs e)
+    {
+        NewAlbumForm.Visibility   = Visibility.Collapsed;
+        CreateAlbumBtn.Visibility = Visibility.Visible;
+        NewAlbumNameBox.Text      = string.Empty;
+    }
+
+    private async void NewAlbumNameBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if      (e.Key == Key.Enter)  await DoCreateAlbumAsync();
+        else if (e.Key == Key.Escape) CancelCreateBtn_Click(sender, new RoutedEventArgs());
+    }
+
+    private async Task DoCreateAlbumAsync()
+    {
+        var name = NewAlbumNameBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        await _albumRepository.CreateAlbumAsync(name, null);
+        StatusTxt.Text            = $"Álbum '{name}' creado.";
+        NewAlbumForm.Visibility   = Visibility.Collapsed;
+        CreateAlbumBtn.Visibility = Visibility.Visible;
         await LoadAlbumsAsync();
     }
 

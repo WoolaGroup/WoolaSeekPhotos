@@ -49,30 +49,30 @@ public class PhotoRepository
         });
     }
 
-    public async Task<IEnumerable<Photo>> GetPhotosAsync(int limit = 1000, int offset = 0)
+    public async Task<IEnumerable<Photo>> GetPhotosAsync(int limit = 1000, int offset = 0, string sort = "DateDesc")
     {
         using var connection = _connectionFactory.CreateConnection();
 
-        const string sql = @"
+        // T4-001: el parámetro sort proviene del enum SortMode — no es input de usuario
+        var orderBy = sort switch
+        {
+            "DateAsc"     => "COALESCE(DateTaken, CreatedAt) ASC",
+            "NameAsc"     => "Path ASC",
+            "SizeDesc"    => "FileSize DESC",
+            "CameraModel" => "CameraModel ASC, COALESCE(DateTaken, CreatedAt) DESC",
+            _             => "COALESCE(DateTaken, CreatedAt) DESC",   // DateDesc (default)
+        };
+
+        var sql = $@"
             SELECT Id, Path, Hash, FileSize, DateTaken, Width, Height,
                    Latitude, Longitude, CameraModel, LensModel, Aperture, ShutterSpeed, Iso, FocalLength, Orientation,
                    Status, ThumbnailPath, CreatedAt, LastIndexedAt
             FROM Photos
-            ORDER BY COALESCE(DateTaken, CreatedAt) DESC
+            ORDER BY {orderBy}
             LIMIT @Limit OFFSET @Offset
         ";
 
-        var photos = await connection.QueryAsync<Photo>(sql, new { Limit = limit, Offset = offset });
-
-        foreach (var photo in photos)
-        {
-            if (photo.DateTaken.HasValue)
-            {
-                // Conversión si es necesario
-            }
-        }
-
-        return photos;
+        return await connection.QueryAsync<Photo>(sql, new { Limit = limit, Offset = offset });
     }
 
     public async Task<Photo?> GetPhotoByIdAsync(int id)

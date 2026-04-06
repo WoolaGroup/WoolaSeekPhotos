@@ -125,38 +125,47 @@ public partial class FaceManagementWindow : Window
 
     private async void AssignName_Click(object sender, RoutedEventArgs e)
     {
+        // Mantenido para compatibilidad; la asignación ahora es inline via NameBox_KeyDown
         var button = sender as System.Windows.Controls.Button;
-        var group = button?.Tag as PersonGroup;
-
+        var group  = button?.Tag as PersonGroup;
         if (group == null || group.Faces.Count == 0) return;
+        await AssignNameToGroupAsync(group, group.Faces.First().PersonName ?? "");
+    }
 
-        var firstFace = group.Faces.First();
-        var dialog = new InputDialog("Asignar nombre a la persona", "Nombre:",
-                                      firstFace.PersonName ?? "");
+    private async void NameBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter) return;
 
-        if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.Answer))
+        var textBox = sender as System.Windows.Controls.TextBox;
+        var group   = textBox?.Tag as PersonGroup;
+        if (group == null || group.Faces.Count == 0 || textBox == null) return;
+
+        var newName = textBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(newName)) return;
+
+        await AssignNameToGroupAsync(group, newName);
+        textBox.Text = string.Empty;
+    }
+
+    private async Task AssignNameToGroupAsync(PersonGroup group, string newName)
+    {
+        var personId = group.Faces.FirstOrDefault(f => !string.IsNullOrEmpty(f.PersonId))?.PersonId
+                       ?? Guid.NewGuid().ToString();
+
+        var tagName = $"persona_{newName.ToLower().Replace(" ", "_")}";
+        var tagId   = await _tagRepository.GetOrCreateTagAsync(tagName, "Person", true);
+
+        foreach (var face in group.Faces)
         {
-            var newName = dialog.Answer.Trim();
-            // Reuse existing PersonId if any face in the group already has one
-            var personId = group.Faces.FirstOrDefault(f => !string.IsNullOrEmpty(f.PersonId))?.PersonId
-                           ?? Guid.NewGuid().ToString();
-
-            var tagName = $"persona_{newName.ToLower().Replace(" ", "_")}";
-            var tagId = await _tagRepository.GetOrCreateTagAsync(tagName, "Person", true);
-
-            // Update ALL faces in the group
-            foreach (var face in group.Faces)
-            {
-                await _faceRepository.UpdatePersonNameAsync(face.Id, newName, personId);
-                await _tagRepository.AddTagToPhotoAsync(face.PhotoId, tagId, face.Confidence, "FaceAgent");
-            }
-
-            LoadGroups();
-
-            var statusText = FindName("StatusText") as System.Windows.Controls.TextBlock;
-            if (statusText != null)
-                statusText.Text = $"'{newName}' asignado a {group.Faces.Count} rostros";
+            await _faceRepository.UpdatePersonNameAsync(face.Id, newName, personId);
+            await _tagRepository.AddTagToPhotoAsync(face.PhotoId, tagId, face.Confidence, "FaceAgent");
         }
+
+        LoadGroups();
+
+        var statusText = FindName("StatusText") as System.Windows.Controls.TextBlock;
+        if (statusText != null)
+            statusText.Text = $"'{newName}' asignado a {group.Faces.Count} rostros";
     }
 
 
