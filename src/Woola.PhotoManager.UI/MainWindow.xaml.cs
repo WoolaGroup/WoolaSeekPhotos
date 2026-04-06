@@ -1,12 +1,14 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Woola.PhotoManager.Core.Agents;
 // Alias para resolver ambigüedad con System.Windows.Forms
 using Button        = System.Windows.Controls.Button;
 using KeyEventArgs  = System.Windows.Input.KeyEventArgs;
 using Woola.PhotoManager.Core.Services;
 using Woola.PhotoManager.Infrastructure.Repositories;
+using Woola.PhotoManager.UI.Services;
 using Woola.PhotoManager.UI.ViewModels;
 
 namespace Woola.PhotoManager.UI;
@@ -200,7 +202,18 @@ public partial class MainWindow : Window
         => new DuplicatesWindow(_photoRepository) { Owner = this }.ShowDialog();
 
     private void SettingsBtn_Click(object sender, RoutedEventArgs e)
-        => new SettingsWindow(_orchestrator, _settingsService) { Owner = this }.ShowDialog();
+    {
+        var folderPicker = App.Services.GetRequiredService<IFolderPickerService>();
+        new SettingsWindow(_orchestrator, _settingsService, folderPicker) { Owner = this }.ShowDialog();
+    }
+
+    private async void CloudImportBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var cloudSvc = App.Services.GetRequiredService<ICloudImportService>();
+        var win = new CloudImportWindow(cloudSvc, _settingsService) { Owner = this };
+        if (win.ShowDialog() == true)
+            await _vm.RefreshAlbumsAsync(); // refresca sidebar tras indexar
+    }
 
     private async void ReprocessTagsBtn_Click(object sender, RoutedEventArgs e)
     {

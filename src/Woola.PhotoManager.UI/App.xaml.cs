@@ -65,6 +65,7 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<ISimilarPhotosService, SimilarPhotosService>();    // IMP-009
                 services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
                 services.AddSingleton<IPhotoIndexer, PhotoIndexer>();
+                services.AddSingleton<ICloudImportService, CloudImportService>();
 
                 // UI
                 services.AddSingleton<IFolderPickerService, WinFormsFolderPickerService>();

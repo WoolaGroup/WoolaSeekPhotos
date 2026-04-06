@@ -515,6 +515,19 @@
                                 Click="TestOcrBtn_Click"
                                 Foreground="{StaticResource BrushTextMuted}"/>
 
+                        <Separator Margin="14,8"/>
+
+                        <!-- SECCIÓN: Cloud -->
+                        <TextBlock Text="CLOUD"
+                                   Style="{StaticResource SectionLabel}"
+                                   Margin="16,0,16,4"/>
+
+                        <Button Content="Importar desde Cloud"
+                                Style="{StaticResource LeftNavItem}"
+                                x:Name="CloudImportBtn"
+                                Foreground="{StaticResource BrushAccentText}"
+                                Click="CloudImportBtn_Click"/>
+
                         <!-- Carpeta activa (footer del panel) -->
                         <Separator Margin="14,10"/>
                         <TextBlock Text="CARPETA"
