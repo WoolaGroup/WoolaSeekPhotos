@@ -8,7 +8,8 @@ using Woola.PhotoManager.Infrastructure.Repositories;
 
 namespace Woola.PhotoManager.Core.Services;
 
-public class PhotoIndexer : IPhotoIndexer
+/// <summary>B5: PhotoIndexer hereda de BatchIndexer&lt;Photo&gt; para compartir el patrón de indexación.</summary>
+public class PhotoIndexer : BatchIndexer<Photo>, IPhotoIndexer
 {
     private readonly PhotoRepository        _photoRepository;
     private readonly TagRepository          _tagRepository;
@@ -43,7 +44,7 @@ public class PhotoIndexer : IPhotoIndexer
     public event EventHandler<IndexingProgress>? ProgressChanged;
     public bool IsRunning => _isRunning;
 
-    public async Task StartIndexingAsync(string rootPath, CancellationToken cancellationToken = default)
+    public override async Task StartIndexingAsync(string rootPath, CancellationToken cancellationToken = default)
     {
         if (_isRunning) return;
         if (!Directory.Exists(rootPath))
@@ -298,4 +299,45 @@ public class PhotoIndexer : IPhotoIndexer
 
     private void OnProgressChanged(IndexingProgress progress)
         => ProgressChanged?.Invoke(this, progress);
+
+    // ── BatchIndexer<Photo> abstract implementations ─────────────────────────
+    // Nota: estos métodos satisfacen el contrato de BatchIndexer<T> pero
+    // no se invocan en tiempo de ejecución porque StartIndexingAsync está sobreescrito
+    // con el pipeline optimizado (Channel + SemaphoreSlim).
+
+    protected override async IAsyncEnumerable<string> DiscoverPathsAsync(
+        string rootPath,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        await Task.Yield();
+        foreach (var f in Directory.EnumerateFiles(rootPath, "*.*", SearchOption.AllDirectories)
+            .Where(f => SupportedExtensions.Contains(Path.GetExtension(f))))
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return f;
+        }
+    }
+
+    protected override async Task<Photo?> LoadItemAsync(string path, CancellationToken ct)
+    {
+        await Task.Yield();
+        var hash = ComputeHash(path);
+        return await CreatePhotoFromFileAsync(path, hash);
+    }
+
+    protected override async Task<bool> IsAlreadyIndexedAsync(string path, CancellationToken ct)
+    {
+        var hash = ComputeHash(path);
+        return await _photoRepository.PhotoExistsAsync(hash);
+    }
+
+    protected override async Task<Photo> PersistItemAsync(Photo item, CancellationToken ct)
+    {
+        item.Id = await _photoRepository.InsertPhotoAsync(item);
+        return item;
+    }
+
+    protected override Task PersistResultsAsync(
+        Photo item, IEnumerable<ProcessorTag> tags, CancellationToken ct)
+        => Task.CompletedTask; // En el override de StartIndexingAsync, AgentOrchestrator maneja los tags.
 }

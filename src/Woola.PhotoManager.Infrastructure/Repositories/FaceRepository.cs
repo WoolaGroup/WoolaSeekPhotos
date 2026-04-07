@@ -6,7 +6,7 @@ using Woola.PhotoManager.Infrastructure.Database;
 
 namespace Woola.PhotoManager.Infrastructure.Repositories;
 
-public class FaceRepository
+public class FaceRepository : IRepository<Face, int>
 {
     private readonly SqliteConnectionFactory _connectionFactory;
 
@@ -103,5 +103,33 @@ public class FaceRepository
             FROM Faces WHERE Encoding IS NOT NULL
             ORDER BY CreatedAt DESC";
         return await connection.QueryAsync<Face>(sql);
+    }
+
+    // ── IRepository<Face, int> ────────────────────────────────────────────────
+
+    async Task<Face?> IRepository<Face, int>.GetByIdAsync(int id, CancellationToken ct)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QueryFirstOrDefaultAsync<Face>(
+            "SELECT Id, PhotoId, PersonName, PersonId, X, Y, Width, Height, Encoding, Confidence, IsUserConfirmed, CreatedAt FROM Faces WHERE Id = @Id",
+            new { Id = id });
+    }
+
+    Task<int> IRepository<Face, int>.InsertAsync(Face entity, CancellationToken ct)
+        => InsertFaceAsync(entity);
+
+    async Task IRepository<Face, int>.UpdateAsync(Face entity, CancellationToken ct)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(
+            "UPDATE Faces SET PersonName = @PersonName, PersonId = @PersonId, IsUserConfirmed = @IsUserConfirmed WHERE Id = @Id",
+            new { entity.PersonName, entity.PersonId, entity.IsUserConfirmed, entity.Id });
+    }
+
+    async Task<bool> IRepository<Face, int>.ExistsAsync(int id, CancellationToken ct)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.ExecuteScalarAsync<bool>(
+            "SELECT EXISTS(SELECT 1 FROM Faces WHERE Id = @Id)", new { Id = id });
     }
 }

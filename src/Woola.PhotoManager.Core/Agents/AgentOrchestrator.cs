@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Woola.PhotoManager.Domain.Entities;
 using Woola.PhotoManager.Infrastructure.Repositories;
 
@@ -12,47 +12,56 @@ public interface IAgentOrchestrator
     List<IAgent> GetAgents();
 }
 
+/// <summary>
+/// B3: AgentOrchestrator usa ProcessorPipeline&lt;Photo&gt; internamente para
+/// el registro y listado de agentes.
+/// ProcessPhotoAsync mantiene el bucle per-agente para atribuir el Source a cada tag en DB.
+/// </summary>
 public class AgentOrchestrator : IAgentOrchestrator
 {
-    private readonly List<IAgent> _agents = new();
-    private readonly TagRepository _tagRepository;
-    private readonly ILogger<AgentOrchestrator> _logger;
+    private readonly ProcessorPipeline<Photo>       _pipeline;
+    private readonly TagRepository                  _tagRepository;
+    private readonly ILogger<AgentOrchestrator>     _logger;
 
-    // Timeout máximo por agente para que un fallo no bloquee el batch
     private const int AgentTimeoutSeconds = 30;
 
     public AgentOrchestrator(TagRepository tagRepository, ILogger<AgentOrchestrator> logger)
     {
         _tagRepository = tagRepository;
-        _logger = logger;
+        _logger        = logger;
+        _pipeline      = new ProcessorPipeline<Photo>(logger);
     }
 
-    public void RegisterAgent(IAgent agent)
-    {
-        _agents.Add(agent);
-        _agents.Sort((a, b) => a.Priority.CompareTo(b.Priority));
-    }
+    /// <summary>Registra un agente en el pipeline (se ordenan por Priority en ejecución).</summary>
+    public void RegisterAgent(IAgent agent) => _pipeline.Register(agent);
 
+    /// <summary>Habilita o deshabilita un agente por nombre.</summary>
     public void EnableAgent(string agentName, bool enable)
     {
-        var agent = _agents.FirstOrDefault(a => a.Name == agentName);
-        if (agent != null)
-            agent.IsEnabled = enable;
+        var proc = _pipeline.All.FirstOrDefault(p => p.Name == agentName);
+        if (proc != null) proc.IsEnabled = enable;
     }
 
-    public List<IAgent> GetAgents() => _agents.ToList();
+    /// <summary>Devuelve todos los agentes registrados (los que implementan IAgent).</summary>
+    public List<IAgent> GetAgents() => _pipeline.All.OfType<IAgent>().ToList();
 
-    public async Task<AgentResult> ProcessPhotoAsync(Photo photo, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Ejecuta todos los agentes habilitados sobre una foto y persiste los tags en DB.
+    /// Mantiene atribución por Source (agent.Name) para trazabilidad en PhotoTags.
+    /// </summary>
+    public async Task<AgentResult> ProcessPhotoAsync(
+        Photo photo, CancellationToken cancellationToken = default)
     {
         var combinedResult = new AgentResult { AgentName = "Orchestrator", Success = true };
 
-        foreach (var agent in _agents.Where(a => a.IsEnabled))
+        // Iterar en orden de prioridad, igual que ProcessorPipeline.RunAsync
+        foreach (var agent in GetAgents()
+                     .Where(a => a.IsEnabled)
+                     .OrderBy(a => a.Priority))
         {
             if (cancellationToken.IsCancellationRequested) break;
-
             if (!agent.CanProcess(photo)) continue;
 
-            // Timeout individual por agente: evita que OCR/ONNX bloqueen el batch completo
             using var agentTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             agentTimeout.CancelAfter(TimeSpan.FromSeconds(AgentTimeoutSeconds));
 
@@ -63,7 +72,7 @@ public class AgentOrchestrator : IAgentOrchestrator
                 if (result.Success && result.Tags.Count > 0)
                 {
                     combinedResult.Tags.AddRange(result.Tags);
-                    await SaveTagsToDatabase(photo.Id, result.Tags, agent.Name);
+                    await SaveTagsToDatabaseAsync(photo.Id, result.Tags, agent.Name);
                     _logger.LogDebug("{Agent} procesó foto {PhotoId}: {TagCount} tags en {Ms}ms",
                         agent.Name, photo.Id, result.Tags.Count, (int)result.ProcessingTimeMs);
                 }
@@ -88,7 +97,7 @@ public class AgentOrchestrator : IAgentOrchestrator
         return combinedResult;
     }
 
-    private async Task SaveTagsToDatabase(int photoId, List<AgentTag> tags, string source)
+    private async Task SaveTagsToDatabaseAsync(int photoId, List<AgentTag> tags, string source)
     {
         foreach (var tag in tags)
         {

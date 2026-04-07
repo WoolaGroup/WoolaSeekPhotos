@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Configuración"
-        Width="520" Height="720"
+        Width="520" Height="840"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{StaticResource BrushBgDeep}"
@@ -177,6 +177,31 @@
                                     Click="BrowseGDriveBtn_Click"/>
                         </Grid>
 
+                    </StackPanel>
+                </Border>
+
+                <!-- ── ANÁLISIS AI ───────────────────────────────────────────── -->
+                <TextBlock Text="ANÁLISIS AI"
+                           Style="{StaticResource SectionLabel}"
+                           Margin="0,20,0,8"/>
+
+                <Border Background="{StaticResource BrushBgCard}"
+                        CornerRadius="8" Padding="16">
+                    <StackPanel>
+                        <TextBlock Text="API Key de Anthropic (ClaudeVisionAgent)"
+                                   FontSize="12"
+                                   Foreground="{StaticResource BrushTextSecondary}"
+                                   Margin="0,0,0,6"/>
+                        <TextBox x:Name="AnthropicApiKeyBox"
+                                 Height="32"
+                                 Padding="8,0"
+                                 VerticalContentAlignment="Center"
+                                 FontSize="12"/>
+                        <TextBlock Text="Requerida para análisis semántico avanzado. Deja vacío para usar la variable de entorno ANTHROPIC_API_KEY."
+                                   FontSize="10"
+                                   Foreground="{StaticResource BrushTextMuted}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,6,0,0"/>
                     </StackPanel>
                 </Border>
 

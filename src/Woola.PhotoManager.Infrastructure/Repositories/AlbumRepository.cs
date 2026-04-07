@@ -5,7 +5,7 @@ using Woola.PhotoManager.Infrastructure.Database;
 
 namespace Woola.PhotoManager.Infrastructure.Repositories;
 
-public class AlbumRepository
+public class AlbumRepository : IRepository<Album, int>
 {
     private readonly SqliteConnectionFactory _connectionFactory;
 
@@ -122,5 +122,33 @@ public class AlbumRepository
             "SELECT PhotoId FROM AlbumPhotos WHERE AlbumId = @AlbumId",
             new { AlbumId = albumId });
         return ids.ToHashSet();
+    }
+
+    // ── IRepository<Album, int> ───────────────────────────────────────────────
+
+    async Task<Album?> IRepository<Album, int>.GetByIdAsync(int id, CancellationToken ct)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QueryFirstOrDefaultAsync<Album>(
+            "SELECT Id, Name, Description, CoverPhotoId, CreatedAt FROM Albums WHERE Id = @Id",
+            new { Id = id });
+    }
+
+    async Task<int> IRepository<Album, int>.InsertAsync(Album entity, CancellationToken ct)
+        => await CreateAlbumAsync(entity.Name, entity.Description);
+
+    async Task IRepository<Album, int>.UpdateAsync(Album entity, CancellationToken ct)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(
+            "UPDATE Albums SET Name = @Name, Description = @Description, CoverPhotoId = @CoverPhotoId WHERE Id = @Id",
+            new { entity.Name, entity.Description, entity.CoverPhotoId, entity.Id });
+    }
+
+    async Task<bool> IRepository<Album, int>.ExistsAsync(int id, CancellationToken ct)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.ExecuteScalarAsync<bool>(
+            "SELECT EXISTS(SELECT 1 FROM Albums WHERE Id = @Id)", new { Id = id });
     }
 }

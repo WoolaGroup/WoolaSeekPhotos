@@ -78,7 +78,7 @@ public partial class App : System.Windows.Application
         var sp = _host.Services;
         var orchestrator = sp.GetRequiredService<IAgentOrchestrator>();
         orchestrator.RegisterAgent(new MetadataAgent(sp.GetRequiredService<IMetadataService>()));
-        orchestrator.RegisterAgent(new AutoTaggingAgent(sp.GetRequiredService<TagRepository>()));
+        orchestrator.RegisterAgent(new AutoTaggingAgent(sp.GetRequiredService<IAutoTaggingService>()));
         orchestrator.RegisterAgent(new VisionAgent(sp.GetRequiredService<IObjectDetectionService>()));
         orchestrator.RegisterAgent(new OcrAgent(sp.GetRequiredService<IOcrService>()));
         orchestrator.RegisterAgent(new FaceAgent(
@@ -89,7 +89,7 @@ public partial class App : System.Windows.Application
         orchestrator.RegisterAgent(new SceneAgent(sp.GetRequiredService<TagRepository>()));   // D2 P6
         orchestrator.RegisterAgent(new QualityAgent(sp.GetRequiredService<IQualityAssessmentService>())); // D4 P7
         orchestrator.RegisterAgent(new GeoLocationAgent());     // IMP-006 P8
-        orchestrator.RegisterAgent(new ClaudeVisionAgent());    // IMP-007 P9
+        orchestrator.RegisterAgent(new ClaudeVisionAgent(sp.GetRequiredService<ISettingsService>())); // A1 P4
 
         await _host.StartAsync();
         sp.GetRequiredService<MainWindow>().Show();

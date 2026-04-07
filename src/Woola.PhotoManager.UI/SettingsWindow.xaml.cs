@@ -7,7 +7,7 @@ using MessageBox = System.Windows.MessageBox;
 namespace Woola.PhotoManager.UI;
 
 /// <summary>
-/// IMP-010: Ventana de configuración — agentes, clustering facial e importación cloud.
+/// IMP-010: Ventana de configuración — agentes, clustering facial, importación cloud y AI.
 /// </summary>
 public partial class SettingsWindow : Window
 {
@@ -30,6 +30,7 @@ public partial class SettingsWindow : Window
         LoadAgents();
         LoadThreshold();
         LoadCloudSettings();
+        LoadAiSettings();
     }
 
     // ── Agentes ───────────────────────────────────────────────────────────────
@@ -84,6 +85,13 @@ public partial class SettingsWindow : Window
             GoogleDrivePathBox.Text = folder;
     }
 
+    // ── Análisis AI ───────────────────────────────────────────────────────────
+
+    private void LoadAiSettings()
+    {
+        AnthropicApiKeyBox.Text = _settings.AnthropicApiKey ?? string.Empty;
+    }
+
     // ── Guardar / Cancelar ────────────────────────────────────────────────────
 
     private void SaveBtn_Click(object sender, RoutedEventArgs e)
@@ -103,6 +111,11 @@ public partial class SettingsWindow : Window
         _settings.GoogleDrivePath = string.IsNullOrWhiteSpace(GoogleDrivePathBox.Text)
             ? null
             : GoogleDrivePathBox.Text;
+
+        // AI
+        _settings.AnthropicApiKey = string.IsNullOrWhiteSpace(AnthropicApiKeyBox.Text)
+            ? null
+            : AnthropicApiKeyBox.Text;
 
         _settingsService.Save(_settings);
 

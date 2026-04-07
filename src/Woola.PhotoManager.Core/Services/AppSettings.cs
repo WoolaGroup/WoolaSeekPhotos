@@ -25,4 +25,10 @@ public class AppSettings
     public string ImportDestinationPath { get; set; } = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
         "Woola Imports");
+
+    /// <summary>
+    /// A1b: API Key de Anthropic para ClaudeVisionAgent.
+    /// Si es null, se usa la variable de entorno ANTHROPIC_API_KEY como fallback.
+    /// </summary>
+    public string? AnthropicApiKey { get; set; } = null;
 }

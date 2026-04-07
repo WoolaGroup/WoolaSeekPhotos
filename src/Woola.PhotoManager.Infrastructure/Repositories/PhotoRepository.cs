@@ -6,7 +6,7 @@ using Woola.PhotoManager.Infrastructure.Database;
 
 namespace Woola.PhotoManager.Infrastructure.Repositories;
 
-public class PhotoRepository
+public class PhotoRepository : IRepository<Photo, int>
 {
     private readonly SqliteConnectionFactory _connectionFactory;
 
@@ -194,5 +194,36 @@ public class PhotoRepository
             End   = end.ToIsoString(),
             Limit = limit
         });
+    }
+
+    // ── IRepository<Photo, int> ────────────────────────────────────────��──────
+
+    Task<Photo?> IRepository<Photo, int>.GetByIdAsync(int id, CancellationToken ct)
+        => GetPhotoByIdAsync(id);
+
+    Task<int> IRepository<Photo, int>.InsertAsync(Photo entity, CancellationToken ct)
+        => InsertPhotoAsync(entity);
+
+    async Task IRepository<Photo, int>.UpdateAsync(Photo entity, CancellationToken ct)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        const string sql = @"
+            UPDATE Photos SET
+                Status = @Status, ThumbnailPath = @ThumbnailPath,
+                LastIndexedAt = @LastIndexedAt
+            WHERE Id = @Id";
+        await connection.ExecuteAsync(sql, new
+        {
+            entity.Status, entity.ThumbnailPath,
+            LastIndexedAt = entity.LastIndexedAt?.ToIsoString(),
+            entity.Id
+        });
+    }
+
+    async Task<bool> IRepository<Photo, int>.ExistsAsync(int id, CancellationToken ct)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.ExecuteScalarAsync<bool>(
+            "SELECT EXISTS(SELECT 1 FROM Photos WHERE Id = @Id)", new { Id = id });
     }
 }
