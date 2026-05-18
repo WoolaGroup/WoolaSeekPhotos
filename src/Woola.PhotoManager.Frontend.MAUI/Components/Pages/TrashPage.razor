@@ -1,0 +1,29 @@
+@page "/trash"
+@layout Layout.MainLayout
+@inject PhotoApiClient Api
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Trash</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (Photos.Count == 0) { <MudPaper Class="pa-8 text-center"><MudText Typo="Typo.h5">Trash is empty</MudText></MudPaper> }
+    else
+    {
+        @foreach (var photo in Photos)
+        {
+            <MudPaper Class="pa-2 wl-mb-2" Style="display:flex;gap:12px;align-items:center;">
+                @if (photo.ThumbnailUrl != null) { <img src="@($"{BackendConfig.BaseUrl}{photo.ThumbnailUrl}")" style="width:80px;height:60px;object-fit:cover;border-radius:4px;opacity:0.6;" /> }
+                <div style="flex:1;"><MudText Typo="Typo.body2">@photo.FileName</MudText></div>
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="() => RestorePhoto(photo.Id)">Restore</MudButton>
+            </MudPaper>
+        }
+    }
+</MudContainer>
+
+@code {
+    private List<PhotoDto> Photos { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    private readonly HttpClient _http = new() { BaseAddress = new Uri(BackendConfig.BaseUrl) };
+    protected override async Task OnInitializedAsync() { try { Photos = await Api.GetAsync<List<PhotoDto>>("/api/v1/trash"); } catch { Snackbar.Add("Error loading trash", Severity.Error); } finally { IsLoading = false; } }
+    private async Task RestorePhoto(int id) { try { await _http.PostAsync($"/api/v1/trash/{id}/restore", null); Photos.RemoveAll(p => p.Id == id); Snackbar.Add("Restored", Severity.Success); } catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); } }
+}

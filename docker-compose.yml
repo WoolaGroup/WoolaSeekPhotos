@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/Woola.PhotoManager.Backend.WebApi/Dockerfile
+    ports:
+      - "5150:5150"
+    volumes:
+      - woola_data:/data
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - WoolaPhotos__DatabasePath=/data/photos.db
+      - WoolaPhotos__ThumbnailDirectory=/data/thumbnails
+      - Jwt__Key=ChangeThisKeyInProduction-Min32Chars!!
+      - Auth__DefaultPassword=ChangeThisPassword
+    restart: unless-stopped
+
+volumes:
+  woola_data:

@@ -1,0 +1,44 @@
+@page "/albums/{Id:int}"
+@layout Layout.MainLayout
+@inject IAlbumService AlbumService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<MudContainer>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (Album != null)
+    {
+        <MudText Typo="Typo.h4">@Album.Name</MudText>
+        <MudText Typo="Typo.caption">@Album.PhotoCount photos</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="DeleteAlbum" Class="wl-mt-2">Delete Album</MudButton>
+        <MudGrid Class="wl-mt-4">
+            @foreach (var photo in Photos)
+            {
+                <MudItem xs="6" sm="4" md="3" lg="2">
+                    <MudCard>@if (photo.ThumbnailUrl != null) { <MudCardMedia Image="@($"{BackendConfig.BaseUrl}{photo.ThumbnailUrl}")" Height="160" /> }</MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private AlbumDto? Album { get; set; }
+    private List<PhotoDto> Photos { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { Album = await AlbumService.GetByIdAsync(Id); if (Album != null) { var r = await AlbumService.GetPhotosAsync(Id); Photos = r.Items; } }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+    private async Task DeleteAlbum()
+    {
+        var confirmed = await Application.Current!.Windows[0].Page!.DisplayAlertAsync("Delete Album", "Delete this album? Photos won't be deleted.", "Delete", "Cancel");
+        if (!confirmed) return;
+        try { using var http = new HttpClient { BaseAddress = new Uri(BackendConfig.BaseUrl) }; await http.DeleteAsync($"/api/v1/albums/{Id}"); Snackbar.Add("Deleted", Severity.Success); Nav.NavigateTo("/albums"); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+}

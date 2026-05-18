@@ -1,0 +1,33 @@
+@page "/slideshow"
+@layout Layout.EmptyLayout
+@inject IPhotoService PhotoService
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:black;display:flex;flex-direction:column;z-index:9999;">
+@if (Photos.Count == 0)
+{
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;color:white;"><MudText Typo="Typo.h4" Style="color:white;">No photos</MudText></div>
+}
+else
+{
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;" @onkeydown="HandleKeyDown" tabindex="0" @ref="_focusElement">
+        <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);color:white;font-size:14px;background:rgba(0,0,0,0.5);padding:4px 16px;border-radius:20px;">@(CurrentIndex + 1) of @Photos.Count</div>
+        @if (CurrentPhoto?.ThumbnailUrl != null) { <img src="@($"{BackendConfig.BaseUrl}{CurrentPhoto.ThumbnailUrl}")" style="max-width:95vw;max-height:90vh;object-fit:contain;border-radius:4px;" /> }
+    </div>
+}
+</div>
+
+@code {
+    private List<PhotoDto> Photos { get; set; } = new();
+    private PhotoDto? CurrentPhoto => CurrentIndex >= 0 && CurrentIndex < Photos.Count ? Photos[CurrentIndex] : null;
+    private int CurrentIndex { get; set; }
+    private ElementReference _focusElement;
+    private Timer? _timer;
+    protected override async Task OnInitializedAsync() { try { var result = await PhotoService.GetPhotosAsync(1, 200); Photos = result.Items; } catch { } }
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) { await _focusElement.FocusAsync(); _timer = new Timer(_ => { InvokeAsync(StateHasChanged); NextPhoto(); }, null, 3000, 3000); } }
+    private void HandleKeyDown(KeyboardEventArgs e) { if (e.Key == "Escape") Close(); }
+    private void NextPhoto() { if (Photos.Count > 0) CurrentIndex = (CurrentIndex + 1) % Photos.Count; }
+    private void Close() { _timer?.Dispose(); Nav.NavigateTo("/photos"); }
+    public async ValueTask DisposeAsync() { _timer?.Dispose(); await Task.CompletedTask; }
+}

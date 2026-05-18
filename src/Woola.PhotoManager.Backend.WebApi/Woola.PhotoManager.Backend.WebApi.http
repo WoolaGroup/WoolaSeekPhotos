@@ -1,0 +1,6 @@
+@Woola.PhotoManager.Backend.WebApi_HostAddress = http://localhost:5137
+
+GET {{Woola.PhotoManager.Backend.WebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

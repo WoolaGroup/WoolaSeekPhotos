@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore Woola.PhotoManager.slnx
+
+      - name: Build Backend
+        run: dotnet build src/Woola.PhotoManager.Backend.WebApi/Woola.PhotoManager.Backend.WebApi.csproj --no-restore
+
+      - name: Build Shared
+        run: dotnet build src/Woola.PhotoManager.Shared/Woola.PhotoManager.Shared.csproj --no-restore
+
+      - name: Test
+        run: dotnet test tests/Woola.PhotoManager.Tests/Woola.PhotoManager.Tests.csproj --no-restore --verbosity normal
+
+      - name: Build Frontend (Windows)
+        if: runner.os == 'Windows'
+        run: dotnet build src/Woola.PhotoManager.Frontend.MAUI/Woola.PhotoManager.Frontend.MAUI.csproj -f net10.0-windows10.0.19041.0 --no-restore

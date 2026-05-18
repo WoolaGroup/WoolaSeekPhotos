@@ -1,0 +1,60 @@
+@inject NavigationManager Nav
+@inject PhotoApiClient Api
+@inject IJSRuntime JS
+
+<div class="wl-sidebar" id="sidebar">
+    <div class="wl-sidebar__brand">
+        <div class="wl-sidebar__brand-icon">P</div>
+        <span>Woola Photos</span>
+        <button @onclick="ToggleSidebar" style="background:none;border:none;color:white;font-size:20px;cursor:pointer;margin-left:auto;">&#9776;</button>
+    </div>
+    <div class="wl-sidebar__nav">
+        <div class="wl-sidebar__section-label">Main</div>
+        <NavLink class="wl-nav-item" href="/dashboard" Match="NavLinkMatch.All"><span class="wl-nav-item__icon">D</span> Dashboard</NavLink>
+        <NavLink class="wl-nav-item" href="/photos"><span class="wl-nav-item__icon">P</span> Photos</NavLink>
+        <NavLink class="wl-nav-item" href="/albums"><span class="wl-nav-item__icon">A</span> Albums</NavLink>
+        <NavLink class="wl-nav-item" href="/smart-albums"><span class="wl-nav-item__icon">S</span> Smart Albums</NavLink>
+        <div class="wl-sidebar__section-label">Explore</div>
+        <NavLink class="wl-nav-item" href="/timeline"><span class="wl-nav-item__icon">T</span> Timeline</NavLink>
+        <NavLink class="wl-nav-item" href="/map"><span class="wl-nav-item__icon">M</span> Map</NavLink>
+        <NavLink class="wl-nav-item" href="/people"><span class="wl-nav-item__icon">F</span> People</NavLink>
+        <NavLink class="wl-nav-item" href="/tags"><span class="wl-nav-item__icon">T</span> Tags</NavLink>
+        <div class="wl-sidebar__section-label">Tools</div>
+        <NavLink class="wl-nav-item" href="/duplicates"><span class="wl-nav-item__icon">D</span> Duplicates</NavLink>
+        <NavLink class="wl-nav-item" href="/slideshow"><span class="wl-nav-item__icon">S</span> Slideshow</NavLink>
+        <NavLink class="wl-nav-item" href="/upload"><span class="wl-nav-item__icon">U</span> Upload</NavLink>
+        <NavLink class="wl-nav-item" href="/indexing"><span class="wl-nav-item__icon">I</span> Indexing</NavLink>
+        <NavLink class="wl-nav-item" href="/trash"><span class="wl-nav-item__icon">T</span> Trash</NavLink>
+        <NavLink class="wl-nav-item" href="/stats"><span class="wl-nav-item__icon">S</span> Statistics</NavLink>
+        <NavLink class="wl-nav-item" href="/settings"><span class="wl-nav-item__icon">C</span> Settings</NavLink>
+    </div>
+    <div class="wl-sidebar__footer">
+        <div style="font-size:11px;color:var(--wl-gray-400);margin-bottom:4px;" id="sidebar-stats">@statsText</div>
+        Woola Photos v1.0
+    </div>
+</div>
+
+@code {
+    private string statsText = "Loading...";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var json = await Api.GetAsync<JsonElement>("/api/v1/admin/db-stats");
+            if (json.TryGetProperty("photos", out var p) && p.TryGetProperty("total", out var t) && p.TryGetProperty("totalFileSize", out var s))
+            {
+                var count = t.GetInt32();
+                var bytes = s.GetInt64();
+                var display = bytes < 1073741824 ? $"{bytes / 1048576.0:F0} MB" : $"{bytes / 1073741824.0:F2} GB";
+                statsText = $"{count:N0} photos &middot; {display}";
+            }
+        }
+        catch { statsText = "Not connected"; }
+    }
+
+    private async Task ToggleSidebar()
+    {
+        await JS.InvokeVoidAsync("eval", "var s=document.getElementById('sidebar');if(s){if(s.style.display==='none'){s.style.display='flex'}else{s.style.display='none'}}");
+    }
+}

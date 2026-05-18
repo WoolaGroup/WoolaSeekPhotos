@@ -1,0 +1,39 @@
+<MudOverlay Visible="Visible" OnClick="Close" />
+<MudDrawer Open="Visible" Variant="DrawerVariant.Temporary" Anchor="Anchor.End" Width="420px">
+    @if (IsLoading) { <div class="pa-4"><MudProgressLinear Indeterminate="true" /></div> }
+    else if (Photo != null)
+    {
+        <MudDrawerHeader><MudText Typo="Typo.subtitle1">@Photo.FileName</MudText><MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="Close" /></MudDrawerHeader>
+        <div style="padding:16px;">
+            @if (Photo.ThumbnailUrl != null)
+            {
+                <img src="@($"{BackendConfig.BaseUrl}{Photo.ThumbnailUrl}")" alt="@Photo.FileName" style="width:100%;height:240px;object-fit:cover;border-radius:8px;margin-bottom:16px;" />
+            }
+            <MudText Typo="Typo.body2"><strong>Size:</strong> @Photo.FileSizeDisplay</MudText>
+            @if (Photo.DateTaken.HasValue) { <MudText Typo="Typo.body2"><strong>Taken:</strong> @Photo.DateTaken.Value.ToString("g")</MudText> }
+        </div>
+    }
+</MudDrawer>
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public int PhotoId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Inject] private IPhotoService PhotoService { get; set; } = default!;
+
+    private PhotoDetailDto? Photo { get; set; }
+    private bool IsLoading { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Visible && PhotoId > 0 && Photo?.Id != PhotoId) await LoadPhotoAsync();
+    }
+    private async Task LoadPhotoAsync()
+    {
+        IsLoading = true;
+        try { var detail = await PhotoService.GetPhotoAsync(PhotoId); if (detail != null) { Photo = detail; } }
+        catch { }
+        finally { IsLoading = false; }
+    }
+    private async Task Close() { await OnClose.InvokeAsync(); }
+}

@@ -1,0 +1,52 @@
+@page "/albums"
+@layout Layout.MainLayout
+@inject IAlbumService AlbumService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Albums</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else
+    {
+        <div style="display:flex;gap:12px;margin-bottom:16px;">
+            <MudTextField @bind-Value="_newName" Placeholder="New album..." Variant="Variant.Outlined" Class="flex-grow-1" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateAlbum" Disabled="string.IsNullOrEmpty(_newName)">Create</MudButton>
+        </div>
+        @if (Albums.Count == 0) { <MudPaper Class="pa-8 text-center"><MudText Typo="Typo.h5">No albums</MudText></MudPaper> }
+        else
+        {
+            <MudGrid>
+                @foreach (var album in Albums)
+                {
+                    <MudItem xs="12" sm="6" md="4" lg="3">
+                        <MudCard Style="cursor:pointer;" OnClick="() => Nav.NavigateTo($'/albums/{album.Id}')">
+                            <MudCardContent>
+                                <MudText Typo="Typo.subtitle1">@album.Name</MudText>
+                                <MudText Typo="Typo.caption">@album.PhotoCount photos</MudText>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    }
+</MudContainer>
+
+@code {
+    private List<AlbumDto> Albums { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    private string _newName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { Albums = await AlbumService.GetAllAsync(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+    private async Task CreateAlbum()
+    {
+        try { var album = await AlbumService.CreateAsync(_newName, null); Albums.Insert(0, album); _newName = string.Empty; Snackbar.Add("Album created", Severity.Success); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+}

@@ -1,0 +1,100 @@
+@page "/settings"
+@layout Layout.MainLayout
+@inject PhotoApiClient Api
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Settings</MudText>
+
+    <MudPaper Class="pa-4 wl-mb-4">
+        <MudText Typo="Typo.h6">Backup</MudText>
+        <MudText Typo="Typo.body2" Class="wl-mt-2">Automatic backup of database and thumbnails.</MudText>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+            <label><input type="checkbox" @bind="BackupEnabled" /> Enabled</label>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+            <MudTextField @bind-Value="BackupFolder" Placeholder="C:\Backups" Variant="Variant.Outlined" Class="flex-grow-1" Label="Folder" />
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+            <MudNumericField @bind-Value="BackupInterval" Label="Every (hours)" Variant="Variant.Outlined" Min="1" Max="168" Class="flex-grow-1" />
+            <MudNumericField @bind-Value="BackupMax" Label="Max backups" Variant="Variant.Outlined" Min="1" Max="365" Class="flex-grow-1" />
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveBackupSettings" Disabled="IsSaving">@(IsSaving ? "Saving..." : "Save Settings")</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="BackupNow" Disabled="IsBackingUp">@(IsBackingUp ? "Running..." : "Backup Now")</MudButton>
+        </div>
+        @if (!string.IsNullOrEmpty(BackupStatus)) { <MudAlert Class="wl-mt-2" Severity="Severity.Info">@BackupStatus</MudAlert> }
+    </MudPaper>
+
+    <MudPaper Class="pa-4 wl-mb-4">
+        <MudText Typo="Typo.h6">DB Maintenance</MudText>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+            <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="VacuumDb">Vacuum Database</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ReindexDb">Reindex</MudButton>
+        </div>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 wl-mb-4">
+        <MudText Typo="Typo.h6">Connection</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="CheckConnection">Test Connection</MudButton>
+        @if (ConnectionResult != null) { <MudAlert Class="wl-mt-2" Severity="@(ConnectionResult == "Connected" ? Severity.Success : Severity.Error)">@ConnectionResult</MudAlert> }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private bool BackupEnabled = false;
+    private string BackupFolder = "";
+    private double BackupInterval = 24;
+    private double BackupMax = 7;
+    private string? BackupStatus;
+    private string? ConnectionResult;
+    private bool IsSaving, IsBackingUp;
+    private readonly HttpClient _http = new() { BaseAddress = new Uri(BackendConfig.BaseUrl) };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var json = await Api.GetAsync<JsonElement>("/api/v1/admin/backup-settings");
+            if (json.TryGetProperty("enabled", out var e)) BackupEnabled = e.GetBoolean();
+            if (json.TryGetProperty("folderPath", out var f)) BackupFolder = f.GetString() ?? "";
+            if (json.TryGetProperty("intervalHours", out var i)) BackupInterval = i.GetDouble();
+            if (json.TryGetProperty("maxBackups", out var m)) BackupMax = m.GetDouble();
+        }
+        catch { /* backend may not be running */ }
+    }
+
+    private async Task SaveBackupSettings()
+    {
+        IsSaving = true;
+        try { var r = await _http.PostAsJsonAsync("/api/v1/admin/backup-settings", new { enabled = BackupEnabled, folderPath = BackupFolder, intervalHours = (int)BackupInterval, maxBackups = (int)BackupMax }); r.EnsureSuccessStatusCode(); Snackbar.Add("Backup settings saved", Severity.Success); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsSaving = false; }
+    }
+
+    private async Task BackupNow()
+    {
+        IsBackingUp = true;
+        try { var r = await _http.PostAsync("/api/v1/admin/backup-now", null); r.EnsureSuccessStatusCode(); var json = await r.Content.ReadFromJsonAsync<JsonElement>(); if (json.TryGetProperty("status", out var s)) BackupStatus = s.GetString(); Snackbar.Add("Backup completed", Severity.Success); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsBackingUp = false; }
+    }
+
+    private async Task VacuumDb()
+    {
+        try { var r = await _http.PostAsync("/api/v1/admin/vacuum", null); r.EnsureSuccessStatusCode(); var json = await r.Content.ReadFromJsonAsync<JsonElement>(); if (json.TryGetProperty("freed", out var f)) Snackbar.Add($"Freed {f.GetInt64() / 1024} KB", Severity.Success); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ReindexDb()
+    {
+        try { var r = await _http.PostAsync("/api/v1/admin/reindex", null); r.EnsureSuccessStatusCode(); Snackbar.Add("Database reindexed", Severity.Success); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task CheckConnection()
+    {
+        try { var r = await _http.GetAsync("/api/v1/health"); ConnectionResult = r.IsSuccessStatusCode ? "Connected" : $"Error: {r.StatusCode}"; }
+        catch (Exception ex) { ConnectionResult = $"Failed: {ex.Message}"; }
+    }
+}

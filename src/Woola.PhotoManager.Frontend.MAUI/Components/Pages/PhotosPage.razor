@@ -1,0 +1,112 @@
+@page "/photos"
+@layout Layout.MainLayout
+@inject IPhotoService PhotoService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Photos</MudText>
+    @if (IsLoading && Photos.Count == 0)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudToolBar Class="wl-mb-4" Gutters="false">
+            <MudTextField @bind-Value="_searchText" Placeholder="Search..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" DebounceInterval="300" Variant="Variant.Outlined" @bind-Value:after="SearchAsync" Class="flex-grow-1" />
+            <select @bind="_cameraFilter" @bind:after="SearchAsync" style="padding:4px 8px;border:1px solid var(--wl-gray-300);border-radius:4px;font-size:14px;">
+                <option value="">All Cameras</option>
+                @foreach (var cam in Cameras) { <option value="@cam">@cam</option> }
+            </select>
+            <MudIconButton Icon="@Icons.Material.Filled.CheckBox" Color="@(BulkMode ? Color.Primary : Color.Default)" OnClick="ToggleBulkMode" />
+            @if (BulkMode && SelectedIds.Count > 0)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Label" Color="Color.Primary" OnClick="OpenTagDialog" />
+                <MudIconButton Icon="@Icons.Material.Filled.FileDownload" Color="Color.Primary" OnClick="ExportSelected" />
+            }
+            <MudIconButton Icon="@Icons.Material.Filled.Description" Color="Color.Default" OnClick="ExportCsv" />
+            <MudIconButton Icon="@Icons.Material.Filled.Slideshow" OnClick="GoToSlideshow" />
+
+        </MudToolBar>
+        @if (BulkMode && SelectedIds.Count > 0)
+        {
+            <MudAlert Severity="Severity.Info" Class="wl-mb-2">@SelectedIds.Count selected</MudAlert>
+        }
+        @if (Photos.Count == 0 && !IsLoading)
+        {
+            <MudPaper Class="pa-8 text-center"><MudText Typo="Typo.h5">No photos found</MudText><MudLink Href="/indexing">Index your photos</MudLink></MudPaper>
+        }
+        else
+        {
+            <MudGrid>
+                @foreach (var photo in Photos)
+                {
+                    <MudItem xs="6" sm="4" md="3" lg="2">
+                        <MudCard OnClick="() => SelectPhoto(photo.Id)" Style="cursor:pointer;">
+                            @if (photo.ThumbnailUrl != null) { <MudCardMedia Image="@($"{BackendConfig.BaseUrl}{photo.ThumbnailUrl}")" Height="160" /> }
+                            <MudCardContent Class="pa-2">
+                                @if (BulkMode) { <input type="checkbox" checked="@SelectedIds.Contains(photo.Id)" @onchange="() => ToggleSelection(photo.Id)" style="width:18px;height:18px;" @onclick:stopPropagation="true" /> }
+                                <MudText Typo="Typo.body2">@photo.FileName</MudText>
+                                <MudText Typo="Typo.caption">@photo.DateTaken?.ToString("g")</MudText>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @if (HasMorePages)
+        {
+            <div class="text-center"><MudButton Variant="Variant.Outlined" OnClick="LoadMoreAsync" Disabled="IsLoadingMore">@(IsLoadingMore ? "Loading..." : "Load More")</MudButton></div>
+        }
+    }
+</MudContainer>
+<PhotoDetailDrawer Visible="_showDrawer" PhotoId="_selectedPhotoId" OnClose="CloseDrawer" />
+
+@code {
+    private const int PageSize = 50;
+    private List<PhotoDto> Photos { get; set; } = new();
+    private List<string> Cameras { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    private bool IsLoadingMore { get; set; }
+    private bool HasMorePages { get; set; }
+    private int CurrentPage { get; set; } = 1;
+    private string _searchText = string.Empty;
+    private string _cameraFilter = string.Empty;
+    private bool _showDrawer;
+    private int _selectedPhotoId;
+    private bool BulkMode { get; set; }
+    private HashSet<int> SelectedIds { get; set; } = new();
+    protected override async Task OnInitializedAsync() { await LoadPhotosAsync(); }
+    private async Task SearchAsync() { CurrentPage = 1; await LoadPhotosAsync(); }
+    private async Task LoadPhotosAsync()
+    {
+        IsLoading = CurrentPage == 1;
+        try { var r = await PhotoService.GetPhotosAsync(CurrentPage, PageSize, search: _searchText); if (CurrentPage == 1) Photos = r.Items; else Photos.AddRange(r.Items); HasMorePages = r.HasNextPage; }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+    private async Task LoadMoreAsync() { IsLoadingMore = true; CurrentPage++; try { var r = await PhotoService.GetPhotosAsync(CurrentPage, PageSize, search: _searchText); Photos.AddRange(r.Items); HasMorePages = r.HasNextPage; } catch { CurrentPage--; } finally { IsLoadingMore = false; } }
+    private void SelectPhoto(int id) { if (!BulkMode) { _selectedPhotoId = id; _showDrawer = true; } }
+    private async Task CloseDrawer() { _showDrawer = false; _selectedPhotoId = 0; }
+    private void GoToSlideshow() { Nav.NavigateTo("/slideshow"); }
+    private void ToggleBulkMode() { BulkMode = !BulkMode; if (!BulkMode) SelectedIds.Clear(); }
+    private void ToggleSelection(int id) { if (!SelectedIds.Remove(id)) SelectedIds.Add(id); }
+    private async Task OpenTagDialog()
+    {
+        var tagName = await Application.Current!.Windows[0].Page!.DisplayPromptAsync("Batch Tag", "Enter tag name:", "OK", "Cancel", "tag name");
+        if (string.IsNullOrEmpty(tagName)) return;
+        try { using var http = new HttpClient { BaseAddress = new Uri(BackendConfig.BaseUrl) }; var r = await http.PostAsJsonAsync("/api/v1/batch/tag", new { photoIds = SelectedIds.ToList(), tagNames = new[] { tagName } }); r.EnsureSuccessStatusCode(); Snackbar.Add($"Tagged {SelectedIds.Count} photos", Severity.Success); BulkMode = false; SelectedIds.Clear(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+    private async Task ExportSelected()
+    {
+        try { using var http = new HttpClient { BaseAddress = new Uri(BackendConfig.BaseUrl) }; var r = await http.PostAsJsonAsync("/api/v1/export/photos", new { photoIds = SelectedIds.ToList() }); r.EnsureSuccessStatusCode(); var bytes = await r.Content.ReadAsByteArrayAsync(); await File.WriteAllBytesAsync(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), $"woola-export-{SelectedIds.Count}.zip"), bytes); Snackbar.Add("Exported", Severity.Success); BulkMode = false; SelectedIds.Clear(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+    private async Task ExportCsv()
+    {
+        try { using var http = new HttpClient { BaseAddress = new Uri(BackendConfig.BaseUrl) }; var r = await http.PostAsJsonAsync("/api/v1/export-csv/photos", new { photoIds = Photos.Select(p => p.Id).ToList() }); r.EnsureSuccessStatusCode(); var bytes = await r.Content.ReadAsByteArrayAsync(); await File.WriteAllBytesAsync(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), $"woola-export-{DateTime.UtcNow:yyyyMMdd}.csv"), bytes); Snackbar.Add("CSV exported to Desktop", Severity.Success); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+}

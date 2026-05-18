@@ -1,0 +1,35 @@
+@page "/smart-albums/{AlbumId}"
+@layout Layout.MainLayout
+@inject PhotoApiClient Api
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Smart Album: @AlbumId</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (Photos.Count == 0) { <MudPaper Class="pa-8 text-center"><MudText Typo="Typo.h5">No photos</MudText></MudPaper> }
+    else
+    {
+        <MudGrid>
+            @foreach (var photo in Photos)
+            {
+                <MudItem xs="6" sm="4" md="3" lg="2">
+                    <MudCard>
+                        @if (photo.ThumbnailUrl != null) { <MudCardMedia Image="@($"{BackendConfig.BaseUrl}{photo.ThumbnailUrl}")" Height="160" /> }
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public string AlbumId { get; set; } = "";
+    private List<PhotoDto> Photos { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    protected override async Task OnInitializedAsync()
+    {
+        try { var result = await Api.GetAsync<PagedApiResponse<PhotoDto>>($"/api/v1/smart-albums/{AlbumId}/photos?page=1&pageSize=100"); Photos = result.Items; }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+}

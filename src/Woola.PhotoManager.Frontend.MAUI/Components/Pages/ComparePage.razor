@@ -1,0 +1,35 @@
+@page "/compare/{LeftId:int}/{RightId:int}"
+@layout Layout.MainLayout
+@inject IPhotoService PhotoService
+@inject IJSRuntime JS
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Compare</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (LeftPhoto != null && RightPhoto != null)
+    {
+        <div id="compare-container" style="position:relative;width:100%;height:500px;overflow:hidden;border-radius:8px;border:1px solid var(--wl-gray-200);">
+            @if (LeftPhoto.ThumbnailUrl != null) { <img id="compare-left" src="@($"{BackendConfig.BaseUrl}{LeftPhoto.ThumbnailUrl}")" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;" /> }
+            @if (RightPhoto.ThumbnailUrl != null) { <img id="compare-right" src="@($"{BackendConfig.BaseUrl}{RightPhoto.ThumbnailUrl}")" style="position:absolute;top:0;right:0;width:100%;height:100%;object-fit:contain;clip-path:inset(0 0 0 50%);" /> }
+            <div id="compare-slider" style="position:absolute;top:0;bottom:0;left:50%;width:3px;background:white;cursor:ew-resize;z-index:10;"></div>
+        </div>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int LeftId { get; set; }
+    [Parameter] public int RightId { get; set; }
+    private PhotoDetailDto? LeftPhoto { get; set; }
+    private PhotoDetailDto? RightPhoto { get; set; }
+    private bool IsLoading { get; set; } = true;
+    protected override async Task OnInitializedAsync()
+    {
+        try { LeftPhoto = await PhotoService.GetPhotoAsync(LeftId); RightPhoto = await PhotoService.GetPhotoAsync(RightId); }
+        catch { }
+        finally { IsLoading = false; }
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await JS.InvokeVoidAsync("initCompareSlider");
+    }
+}

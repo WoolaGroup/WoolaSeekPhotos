@@ -1,0 +1,23 @@
+@page "/contacts"
+@layout Layout.MainLayout
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Contacts</MudText>
+    <MudPaper Class="pa-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadContacts">Load Contacts</MudButton>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private async Task LoadContacts()
+    {
+        try
+        {
+            var contacts = await Microsoft.Maui.ApplicationModel.Communication.Contacts.Default.GetAllAsync();
+            if (contacts != null) Snackbar.Add($"Found {contacts.Count()} contacts", Severity.Success);
+            else Snackbar.Add("No contacts or permission denied", Severity.Warning);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+}

@@ -1,0 +1,39 @@
+@page "/duplicates"
+@layout Layout.MainLayout
+@inject PhotoApiClient Api
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Duplicates</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (Groups.Count == 0) { <MudPaper Class="pa-8 text-center"><MudText Typo="Typo.h5">No duplicates</MudText></MudPaper> }
+    else
+    {
+        @foreach (var group in Groups)
+        {
+            <MudPaper Class="pa-4 wl-mb-4">
+                <MudText Typo="Typo.subtitle2">@group.Photos.Count copies</MudText>
+                <div style="display:flex;flex-wrap:wrap;gap:12px;">
+                    @foreach (var photo in group.Photos)
+                    {
+                        <div style="width:180px;">
+                            @if (photo.ThumbnailUrl != null) { <img src="@($"{BackendConfig.BaseUrl}{photo.ThumbnailUrl}")" style="width:100%;height:120px;object-fit:cover;border-radius:4px;" /> }
+                            <MudText Typo="Typo.caption">@photo.FileName</MudText>
+                        </div>
+                    }
+                </div>
+            </MudPaper>
+        }
+    }
+</MudContainer>
+
+@code {
+    private List<DuplicateGroupDto> Groups { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    protected override async Task OnInitializedAsync()
+    {
+        try { Groups = await Api.GetAsync<List<DuplicateGroupDto>>("/api/v1/duplicates"); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+}

@@ -1,0 +1,31 @@
+@page "/timeline"
+@layout Layout.MainLayout
+@inject PhotoApiClient Api
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Timeline</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (Events.Count == 0) { <MudPaper Class="pa-8 text-center"><MudText Typo="Typo.h5">No events</MudText></MudPaper> }
+    else
+    {
+        @foreach (var evt in Events)
+        {
+            <MudPaper Class="pa-4 wl-mb-2">
+                <MudText Typo="Typo.subtitle1">@evt.Name</MudText>
+                <MudText Typo="Typo.caption">@evt.DateRange - @evt.PhotoCount photos</MudText>
+            </MudPaper>
+        }
+    }
+</MudContainer>
+
+@code {
+    private List<EventDto> Events { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    protected override async Task OnInitializedAsync()
+    {
+        try { Events = await Api.GetAsync<List<EventDto>>("/api/v1/events"); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+}

@@ -1,0 +1,41 @@
+@page "/edit/{Id:int}"
+@layout Layout.MainLayout
+@inject IPhotoService PhotoService
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Edit Photo</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (Photo != null)
+    {
+        <MudPaper Class="pa-4"><MudText Typo="Typo.subtitle1">@Photo.FileName</MudText></MudPaper>
+        <div style="display:flex;gap:12px;margin-top:16px;">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RotateLeft" Disabled="IsProcessing">Rotate Left</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RotateRight" Disabled="IsProcessing">Rotate Right</MudButton>
+        </div>
+        @if (IsProcessing) { <MudProgressLinear Indeterminate="true" Class="wl-mt-4" /> }
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private PhotoDetailDto? Photo { get; set; }
+    private bool IsLoading { get; set; } = true;
+    private bool IsProcessing { get; set; }
+    private readonly HttpClient _http = new() { BaseAddress = new Uri(BackendConfig.BaseUrl) };
+    protected override async Task OnInitializedAsync()
+    {
+        try { Photo = await PhotoService.GetPhotoAsync(Id); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+    private async Task RotateLeft() => await RotateAsync(270);
+    private async Task RotateRight() => await RotateAsync(90);
+    private async Task RotateAsync(int degrees)
+    {
+        IsProcessing = true;
+        try { await _http.PostAsync($"/api/v1/edit/{Id}/rotate?degrees={degrees}", null); Snackbar.Add("Rotated", Severity.Success); Photo = await PhotoService.GetPhotoAsync(Id); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsProcessing = false; }
+    }
+}

@@ -1,0 +1,35 @@
+@page "/map"
+@layout Layout.MainLayout
+@inject PhotoApiClient Api
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@implements IAsyncDisposable
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Map</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (Photos.Count == 0) { <MudPaper Class="pa-8 text-center"><MudText Typo="Typo.h5">No geotagged photos</MudText></MudPaper> }
+    else { <div id="map" style="height:500px;width:100%;border-radius:8px;border:1px solid var(--wl-gray-200);"></div> }
+</MudContainer>
+
+@code {
+    private List<GeoPhotoDto> Photos { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    private DotNetObjectReference<MapPage>? _objRef;
+    protected override async Task OnInitializedAsync()
+    {
+        try { Photos = await Api.GetAsync<List<GeoPhotoDto>>("/api/v1/geo/photos"); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Photos.Count > 0)
+        {
+            _objRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("initMap", _objRef, Photos);
+        }
+    }
+    [JSInvokable] public void OnPhotoClick(int photoId) { }
+    public async ValueTask DisposeAsync() { _objRef?.Dispose(); await JS.InvokeVoidAsync("destroyMap"); }
+}

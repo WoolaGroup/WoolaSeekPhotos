@@ -1,0 +1,62 @@
+@page "/"
+@page "/dashboard"
+@layout Layout.MainLayout
+@inject IDashboardService DashboardService
+@inject PhotoApiClient Api
+@inject NavigationManager Nav
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Dashboard</MudText>
+    @if (IsLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (Stats != null)
+    {
+        <MudGrid>
+            <MudItem xs="6" sm="3">
+                <MudPaper Class="pa-4 text-center" Elevation="1" Style="cursor:pointer;" OnClick="() => Nav.NavigateTo('/photos')">
+                    <MudText Typo="Typo.caption">Total Photos</MudText>
+                    <MudText Typo="Typo.h3" Color="Color.Primary">@Stats.TotalPhotos</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudPaper Class="pa-4 text-center" Elevation="1" Style="cursor:pointer;" OnClick="() => Nav.NavigateTo('/albums')">
+                    <MudText Typo="Typo.caption">Albums</MudText>
+                    <MudText Typo="Typo.h3" Color="Color.Secondary">@Stats.TotalAlbums</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudPaper Class="pa-4 text-center" Elevation="1">
+                    <MudText Typo="Typo.caption">Storage</MudText>
+                    <MudText Typo="Typo.h3" Color="Color.Warning">@Stats.TotalFileSizeDisplay</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudPaper Class="pa-4 text-center" Elevation="1" Style="cursor:pointer;" OnClick="() => Nav.NavigateTo('/indexing')">
+                    <MudText Typo="Typo.caption">Indexed Today</MudText>
+                    <MudText Typo="Typo.h3" Color="Color.Success">@Stats.PhotosIndexedToday</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private DashboardStatsDto? Stats { get; set; }
+    private bool IsLoading { get; set; } = true;
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Stats = await DashboardService.GetStatsAsync();
+        }
+        catch
+        {
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+}

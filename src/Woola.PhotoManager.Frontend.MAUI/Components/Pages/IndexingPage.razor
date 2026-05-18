@@ -1,0 +1,25 @@
+@page "/indexing"
+@layout Layout.MainLayout
+@inject IPhotoService PhotoService
+@inject ISnackbar Snackbar
+@implements IAsyncDisposable
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Indexing</MudText>
+    <MudPaper Class="pa-4">
+        <div style="display:flex;gap:12px;">
+            <MudTextField @bind-Value="FolderPath" Placeholder="C:\Users\...\Photos" Variant="Variant.Outlined" Class="flex-grow-1" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="StartIndexing" Disabled="string.IsNullOrEmpty(FolderPath) || IsIndexing">Start</MudButton>
+        </div>
+    </MudPaper>
+    @if (IsIndexing) { <MudProgressLinear Class="wl-mt-4" Indeterminate="true" /> }
+</MudContainer>
+
+@code {
+    private IndexingHubClient? _hub;
+    private string FolderPath { get; set; } = "";
+    private bool IsIndexing { get; set; }
+    protected override async Task OnInitializedAsync() { _hub = new IndexingHubClient(); await _hub.ConnectAsync(); }
+    private async Task StartIndexing() { IsIndexing = true; try { await PhotoService.InitiateIndexingAsync(FolderPath); } catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); } finally { IsIndexing = false; } }
+    public async ValueTask DisposeAsync() { if (_hub != null) await _hub.DisposeAsync(); }
+}

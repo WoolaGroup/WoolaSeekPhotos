@@ -1,0 +1,34 @@
+@page "/smart-albums"
+@layout Layout.MainLayout
+@inject PhotoApiClient Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Smart Albums</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else
+    {
+        <MudGrid>
+            @foreach (var album in Albums)
+            {
+                <MudItem xs="6" sm="4" md="3">
+                    <MudPaper Class="pa-4 text-center" Style="cursor:pointer;" OnClick="() => Nav.NavigateTo($'/smart-albums/{album.Id}')">
+                        <MudText Typo="Typo.subtitle1">@album.Name</MudText>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private List<SmartAlbumDto> Albums { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    protected override async Task OnInitializedAsync()
+    {
+        try { Albums = await Api.GetAsync<List<SmartAlbumDto>>("/api/v1/smart-albums"); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+}

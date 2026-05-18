@@ -1,0 +1,48 @@
+@page "/upload"
+@layout Layout.MainLayout
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Upload Photos</MudText>
+    <MudPaper Class="pa-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="PickAndUpload" Disabled="IsUploading">@(IsUploading ? "Uploading..." : "Pick Photos")</MudButton>
+    </MudPaper>
+    @if (IsUploading) { <MudProgressLinear Indeterminate="true" Class="wl-mt-4" /> }
+</MudContainer>
+
+@code {
+    private bool IsUploading { get; set; }
+    private async Task PickAndUpload()
+    {
+        try
+        {
+            var result = await FilePicker.Default.PickMultipleAsync(new PickOptions
+            {
+                PickerTitle = "Select photos",
+                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+                {
+                    { DevicePlatform.WinUI, new[] { ".jpg", ".jpeg", ".png", ".webp" } }
+                })
+            });
+            if (result == null || !result.Any()) return;
+            IsUploading = true;
+            var uploaded = 0;
+            foreach (var file in result)
+            {
+                try
+                {
+                    using var stream = await file.OpenReadAsync();
+                    using var http = new HttpClient { BaseAddress = new Uri(BackendConfig.BaseUrl) };
+                    using var content = new MultipartFormDataContent();
+                    content.Add(new StreamContent(stream), "file", file.FileName);
+                    var response = await http.PostAsync("/api/v1/upload", content);
+                    if (response.IsSuccessStatusCode) uploaded++;
+                }
+                catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+            }
+            Snackbar.Add($"Uploaded {uploaded} of {result.Count()}", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsUploading = false; }
+    }
+}

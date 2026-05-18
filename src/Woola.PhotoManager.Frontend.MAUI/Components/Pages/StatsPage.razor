@@ -1,0 +1,36 @@
+@page "/stats"
+@layout Layout.MainLayout
+@inject PhotoApiClient Api
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Statistics</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4"><MudText Typo="Typo.h6">Cameras</MudText>
+                @foreach (var c in Cameras) { <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>@c.camera</span><strong>@c.count</strong></div> }</MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4"><MudText Typo="Typo.h6">Lenses</MudText>
+                @foreach (var l in Lenses) { <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>@l.lens</span><strong>@l.count</strong></div> }</MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private bool IsLoading { get; set; } = true;
+    private List<CameraStat> Cameras { get; set; } = new();
+    private List<LensStat> Lenses { get; set; } = new();
+    protected override async Task OnInitializedAsync()
+    {
+        try { Cameras = await Api.GetAsync<List<CameraStat>>("/api/v1/stats/cameras"); Lenses = await Api.GetAsync<List<LensStat>>("/api/v1/stats/lenses"); }
+        catch { Snackbar.Add("Error loading stats", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+    private record CameraStat(string camera, int count);
+    private record LensStat(string lens, int count);
+}

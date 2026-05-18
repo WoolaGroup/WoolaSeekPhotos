@@ -1,7 +1,21 @@
 <Solution>
+  <!-- Existing WPF projects (legacy) -->
   <Project Path="src/Woola.PhotoManager.Common/Woola.PhotoManager.Common.csproj" />
   <Project Path="src/Woola.PhotoManager.Core/Woola.PhotoManager.Core.csproj" />
   <Project Path="src/Woola.PhotoManager.Domain/Woola.PhotoManager.Domain.csproj" />
   <Project Path="src/Woola.PhotoManager.Infrastructure/Woola.PhotoManager.Infrastructure.csproj" />
   <Project Path="src/Woola.PhotoManager.UI/Woola.PhotoManager.UI.csproj" />
+
+  <!-- New Backend (Clean Architecture) -->
+  <Project Path="src/Woola.PhotoManager.Shared/Woola.PhotoManager.Shared.csproj" />
+  <Project Path="src/Woola.PhotoManager.Backend.Domain/Woola.PhotoManager.Backend.Domain.csproj" />
+  <Project Path="src/Woola.PhotoManager.Backend.Application/Woola.PhotoManager.Backend.Application.csproj" />
+  <Project Path="src/Woola.PhotoManager.Backend.Infrastructure/Woola.PhotoManager.Backend.Infrastructure.csproj" />
+  <Project Path="src/Woola.PhotoManager.Backend.WebApi/Woola.PhotoManager.Backend.WebApi.csproj" />
+
+  <!-- New Frontend (MAUI Blazor Hybrid) -->
+  <Project Path="src/Woola.PhotoManager.Frontend.MAUI/Woola.PhotoManager.Frontend.MAUI.csproj" />
+
+  <!-- Tests -->
+  <Project Path="tests/Woola.PhotoManager.Tests/Woola.PhotoManager.Tests.csproj" />
 </Solution>

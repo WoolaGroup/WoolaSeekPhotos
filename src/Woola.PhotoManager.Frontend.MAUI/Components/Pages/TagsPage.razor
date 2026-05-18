@@ -1,0 +1,32 @@
+@page "/tags"
+@layout Layout.MainLayout
+@inject ITagService TagService
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="wl-mb-4">Tags</MudText>
+    @if (IsLoading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (Tags.Count == 0) { <MudPaper Class="pa-8 text-center"><MudText Typo="Typo.h5">No tags</MudText></MudPaper> }
+    else
+    {
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            @foreach (var tag in Tags)
+            {
+                <span style="background:var(--wl-gray-100);padding:4px 12px;border-radius:16px;font-size:14px;">
+                    @tag.Name <strong>(@tag.UsageCount)</strong>
+                </span>
+            }
+        </div>
+    }
+</MudContainer>
+
+@code {
+    private List<TagDto> Tags { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    protected override async Task OnInitializedAsync()
+    {
+        try { Tags = await TagService.GetAllAsync(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { IsLoading = false; }
+    }
+}
